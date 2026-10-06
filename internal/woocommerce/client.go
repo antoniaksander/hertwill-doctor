@@ -131,6 +131,42 @@ func (c Client) UpdateProductImages(ctx context.Context, id string, imageURLs []
 	return product.toModel(), nil
 }
 
+// UpdateProductTerms replaces a product's categories and/or brands via
+// PUT /products/{id}. A nil slice leaves that field out of the request, so
+// only the fields being changed are sent.
+func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, brandIDs []int) (model.Product, error) {
+	type termRef struct {
+		ID int `json:"id"`
+	}
+	refs := func(ids []int) []termRef {
+		out := make([]termRef, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, termRef{ID: id})
+		}
+		return out
+	}
+	payload := map[string]any{}
+	if categoryIDs != nil {
+		payload["categories"] = refs(categoryIDs)
+	}
+	if brandIDs != nil {
+		payload["brands"] = refs(brandIDs)
+	}
+	if len(payload) == 0 {
+		return model.Product{}, fmt.Errorf("nothing to update")
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return model.Product{}, err
+	}
+	debugBodySummary := fmt.Sprintf("WooCommerce PUT categories: %v brands: %v", categoryIDs, brandIDs)
+	var product wooProduct
+	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, debugBodySummary, &product); err != nil {
+		return model.Product{}, err
+	}
+	return product.toModel(), nil
+}
+
 func (c Client) get(ctx context.Context, path string, query url.Values, target any) error {
 	base, err := url.Parse(strings.TrimRight(c.BaseURL, "/"))
 	if err != nil {
@@ -269,14 +305,29 @@ func (c Client) httpClient() *http.Client {
 }
 
 type wooProduct struct {
-	ID            int    `json:"id"`
-	Name          string `json:"name"`
-	SKU           string `json:"sku"`
-	Price         string `json:"price"`
-	StockStatus   string `json:"stock_status"`
-	Status        string `json:"status"`
-	Images        []any  `json:"images"`
-	StockQuantity *int   `json:"stock_quantity"`
+	ID            int       `json:"id"`
+	Name          string    `json:"name"`
+	SKU           string    `json:"sku"`
+	Price         string    `json:"price"`
+	StockStatus   string    `json:"stock_status"`
+	Status        string    `json:"status"`
+	Images        []any     `json:"images"`
+	StockQuantity *int      `json:"stock_quantity"`
+	Categories    []wooTerm `json:"categories"`
+	Brands        []wooTerm `json:"brands"`
+}
+
+type wooTerm struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func termLabels(terms []wooTerm) []string {
+	labels := make([]string, 0, len(terms))
+	for _, term := range terms {
+		labels = append(labels, fmt.Sprintf("%s (%d)", term.Name, term.ID))
+	}
+	return labels
 }
 
 func (p wooProduct) toModel() model.Product {
@@ -294,5 +345,7 @@ func (p wooProduct) toModel() model.Product {
 		Stock:      stock,
 		ImageCount: &imageCount,
 		Status:     p.Status,
+		Brand:      strings.Join(termLabels(p.Brands), ", "),
+		Categories: termLabels(p.Categories),
 	}
 }
