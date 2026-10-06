@@ -316,6 +316,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetTerms(args[1:], stdout, g, client, stats)
+	case "set-status":
+		if hasHelpArg(args[1:]) {
+			wooSetStatusHelp(stdout)
+			return nil
+		}
+		return runWooSetStatus(args[1:], stdout, g, client, stats)
 	default:
 		return fmt.Errorf("unknown woo subcommand %q", args[0])
 	}
@@ -1594,6 +1600,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooRepairImagesHelp(w)
 	case "set-terms":
 		wooSetTermsHelp(w)
+	case "set-status":
+		wooSetStatusHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1674,6 +1682,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  search         Search WooCommerce products")
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories and/or brands (write operation)")
+	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
 }
 
 func wooProductHelp(w io.Writer) {
