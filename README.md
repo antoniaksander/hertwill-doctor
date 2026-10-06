@@ -8,7 +8,7 @@ The CLI command is:
 hwd
 ```
 
-Most commands are read-only. The only writes are `hwd hertwill import`, `hwd hertwill sync` and `hwd woo repair-images`, and each requires an explicit `--dry-run` or `--confirm`. It never publishes, edits content of, or deletes products, and has no direct SQL, SSH, Hostinger-specific or Roxder-specific logic.
+Most commands are read-only. The only writes are `hwd hertwill import`, `hwd hertwill sync`, `hwd woo repair-images` and `hwd woo set-terms`, and each requires an explicit `--dry-run` or `--confirm`. It never publishes, edits content of, or deletes products, and has no direct SQL, SSH, Hostinger-specific or Roxder-specific logic.
 
 ## Install / Build
 
@@ -100,6 +100,7 @@ hwd diagnose --sku ABC123 --no-hertwill-search
 hwd diagnose --sku ABC123 --hertwill-id 123
 hwd compare --sku ABC123 --hertwill-id 123
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --dry-run
+hwd woo set-terms --id 31968 --categories 54,765 --brands 780 --dry-run
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --confirm
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --max-images 1 --confirm
 ```
@@ -128,6 +129,8 @@ hwd hertwill list --raw --debug
 ```
 
 Raw mode prints only the response body to stdout. Debug output, sanitized request details, response status/content-type/body byte count, request counters, and rate-limit headers stay on stderr. Authorization headers and full tokens are never printed.
+
+`hwd woo set-terms --id <ID> [--categories <ID,...>] [--brands <ID,...>] (--dry-run | --confirm)` replaces a product's categories and/or brands via `PUT /wp-json/wc/v3/products/{id}`. Only the given fields are sent; a flag that is left out is not changed, and `none` clears a list. Price, stock, status and content are never touched.
 
 ## Import list and sync
 
