@@ -23,6 +23,7 @@ description: Import and sync Hertwill dropshipping products to the connected Woo
 - Each product and all its variations get the same price.
 - Synced products land in WooCommerce as **private**, in the "All" category, without brand. Nothing in this workflow publishes them.
 - Set brand and categories with `hwd woo set-terms --id <woo id> --categories <ids> --brands <ids> (--dry-run | --confirm)`. The lists replace the current ones. Copy the IDs from a similar product that is already set up (`hwd --json woo product --id <id>` shows names with IDs). The WooCommerce MCP update tool currently fails with an outputSchema error, so don't rely on it for writes.
+- **Re-syncing a product that is already in WooCommerce sets it to private first.** If the sync then fails (seen for MIKA, HAPPY, KLAUS: "sync-failed", no error detail), the live product stays hidden. Before re-syncing a live product, note its status and categories, and check them afterwards; restore with `hwd woo set-status` / `set-terms`. `hwd hertwill sync-job --id <id>` shows Hertwill's job status.
 - 403 "You are not allowed to sync this product" means Hertwill blocks that product for the store. It has to be fixed in the Hertwill dashboard; don't retry.
 
 ## Workflow

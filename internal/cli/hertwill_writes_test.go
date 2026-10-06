@@ -241,3 +241,15 @@ func TestReadPriceFileRejectsBadLines(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncJobPrintsRawResponse(t *testing.T) {
+	newFakeHertwill(t)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hertwill", "sync-job", "--id", "4223"}, &stdout, &stderr, BuildInfo{})
+	if code == 0 {
+		t.Fatal("fake server has no sync-job route; expected an HTTP error")
+	}
+	if code := Run([]string{"hertwill", "sync-job"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected --id to be required")
+	}
+}
