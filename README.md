@@ -8,7 +8,7 @@ The CLI command is:
 hwd
 ```
 
-v1 is read-only. It does not perform write actions, sync retries, product editing, product publishing, product deletion, direct SQL, SSH, Hostinger-specific logic, or Roxder-specific logic.
+Most commands are read-only. The only writes are `hwd hertwill import`, `hwd hertwill sync` and `hwd woo repair-images`, and each requires an explicit `--dry-run` or `--confirm`. It never publishes, edits content of, or deletes products, and has no direct SQL, SSH, Hostinger-specific or Roxder-specific logic.
 
 ## Install / Build
 
@@ -91,6 +91,10 @@ hwd hertwill search --query "boots" --limit 10
 hwd hertwill search --query MOOMIN42B --raw
 hwd hertwill product --id 123
 hwd hertwill sync-status --id 123
+hwd hertwill import-list --contains "breden"
+hwd hertwill import --ids 8096,8097 --dry-run
+hwd hertwill sync --id 9107 --price 40.95 --dry-run
+hwd hertwill sync --file prices.txt --confirm
 hwd diagnose --sku ABC123
 hwd diagnose --sku ABC123 --no-hertwill-search
 hwd diagnose --sku ABC123 --hertwill-id 123
@@ -124,6 +128,25 @@ hwd hertwill list --raw --debug
 ```
 
 Raw mode prints only the response body to stdout. Debug output, sanitized request details, response status/content-type/body byte count, request counters, and rate-limit headers stay on stderr. Authorization headers and full tokens are never printed.
+
+## Import list and sync
+
+These commands replace the Hertwill MCP write tools, which can't sync products with variants.
+
+```sh
+hwd hertwill import-list [--status <STATUS>] [--contains <TEXT>] [--json]
+hwd hertwill import --ids <ID,ID,...> (--dry-run | --confirm)
+hwd hertwill sync (--id <ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm)
+```
+
+- `import-list` reads every page of `GET /v1/import-list`. Without `--status`, Hertwill returns only products that are not synced yet; `--status synced` lists synced ones. `--json` includes each variation's `dropship_id`.
+- `import` adds catalog product IDs (max 50) via `POST /v1/import-list/products`. IDs already in the list are skipped.
+- `sync` calls `POST /v1/sync/products` once per product. **`--price` is the absolute selling price** (e.g. `40.95`), not a markup multiplier: Hertwill's `default_store_markup` field is a price, and the API rejects prices below wholesale cost. The same price is sent for the product and every variation, using the variation `dropship_id`s from the import list.
+- The price file has one `<id> <price>` per line; `#` comments and blank lines are ignored.
+- Products missing from the unsynced import list, or priced below cost, are refused before any request. `--confirm` keeps going after a failed product, then exits non-zero if anything failed or was refused.
+- Synced products land in WooCommerce as private. Nothing here publishes them.
+
+`HERTWILL_ACCESS_TOKEN` can be a Hertwill API key (`hw_live_...`).
 
 ## Doctor
 
@@ -230,7 +253,6 @@ Only available response fields are compared. Unavailable fields are shown as `n/
 - Roxder/private profile
 - WordPress helper plugin
 - safe retry actions
-- optional write actions with confirmation
 - GitHub Releases binary builds
 - Homebrew install support
 - YAML output

@@ -92,14 +92,25 @@ This file tracks endpoint assumptions for Hertwill Doctor v1. Unverified endpoin
 
 ## Import List
 
-- name: add product to import list
+- name: list import list
+- HTTP method: `GET`
+- path: `/v1/import-list`
+- auth required: yes (API key as Bearer token)
+- request schema, if known: `page`, `per_page` (20 used), optional `status`
+- response schema, if known: `{"data": [{"id", "product_id", "name", "sku", "status", "price", "currency", "default_store_markup", "variations": [{"id", "dropship_id", "sku", "gtin"}]}], "meta": {"pagination": {"page", "per_page", "total", "page_count"}}}`
+- verification status: verified against the live API (2026-10)
+- notes: `id` is the catalog product ID, `product_id` the store dropship ID, `price` the wholesale cost. Without `status`, synced products are omitted. Some products report `already_exists` on import but never appear here; syncing those returned 403.
+
+## Add To Import List
+
+- name: add products to import list
 - HTTP method: `POST`
 - path: `/v1/import-list/products`
 - auth required: yes
-- request schema, if known: unknown
-- response schema, if known: unknown
-- verification status: documented, not implemented
-- notes: write/action endpoint, intentionally not implemented in read-only v1.
+- request schema, if known: `{"product_ids": [8096, 8097]}` (1 to 50)
+- response schema, if known: HTTP 201, `{"data": [{"product_id", "status": "added|already_exists|not_found|error", "variations": [{"id", "dropship_id", "sku"}]}]}`
+- verification status: verified against the live API (2026-10)
+- notes: used by `hwd hertwill import`.
 
 ## Sync Products
 
@@ -107,7 +118,7 @@ This file tracks endpoint assumptions for Hertwill Doctor v1. Unverified endpoin
 - HTTP method: `POST`
 - path: `/v1/sync/products`
 - auth required: yes
-- request schema, if known: unknown
-- response schema, if known: unknown
-- verification status: documented, not implemented
-- notes: write/action endpoint, intentionally not implemented in read-only v1.
+- request schema, if known: `{"product_id", "default_store_markup", "currency", "variations": [{"id", "dropship_id", "default_store_markup"}]}`
+- response schema, if known: HTTP 202, `{"data": {"product_id", "status": "syncing", "message"}}`
+- verification status: verified against the live API (2026-10)
+- notes: `default_store_markup` is the absolute selling price, despite the name and docs. A multiplier like `2.0` is rejected with 422 `PRICE_BELOW_COST`. Products with variants need every variation or the API returns 422 "Variations are required for this product". 403 `FORBIDDEN` "You are not allowed to sync this product" was seen for products hidden from the import list. Used by `hwd hertwill sync`.
