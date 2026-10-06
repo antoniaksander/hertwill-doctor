@@ -792,6 +792,12 @@ func runHertwill(args []string, stdout, _ io.Writer, g globals, cfg config.Confi
 			return nil
 		}
 		return runHertwillSync(args[1:], stdout, g, client, stats)
+	case "sync-job":
+		if hasHelpArg(args[1:]) {
+			hertwillSyncJobHelp(stdout)
+			return nil
+		}
+		return runHertwillSyncJob(args[1:], stdout, client)
 	case "sync-status":
 		if hasHelpArg(args[1:]) {
 			hertwillSyncStatusHelp(stdout)
@@ -1627,6 +1633,8 @@ func hertwillHelpFor(args []string, w io.Writer) {
 		hertwillImportHelp(w)
 	case "sync":
 		hertwillSyncHelp(w)
+	case "sync-job":
+		hertwillSyncJobHelp(w)
 	default:
 		hertwillHelp(w)
 	}
@@ -1746,6 +1754,7 @@ func hertwillHelp(w io.Writer) {
 	fmt.Fprintln(w, "  import-list  List the store's import list with variant counts")
 	fmt.Fprintln(w, "  import       Add products to the import list (--dry-run | --confirm)")
 	fmt.Fprintln(w, "  sync         Sync import-list products at a selling price (--dry-run | --confirm)")
+	fmt.Fprintln(w, "  sync-job     Show a product's sync job and recorded errors (read-only)")
 	fmt.Fprintln(w, "  sync-status  Show Hertwill sync status for a product")
 }
 

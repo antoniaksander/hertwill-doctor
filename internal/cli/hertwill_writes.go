@@ -424,3 +424,28 @@ func hertwillSyncHelp(w io.Writer) {
 	fmt.Fprintln(w, "--confirm keeps going after a failed product and exits non-zero if any failed.")
 	fmt.Fprintln(w, "Synced products land in WooCommerce as private; this command never publishes.")
 }
+
+func runHertwillSyncJob(args []string, stdout io.Writer, client hertwill.Client) error {
+	fs := flag.NewFlagSet("hertwill sync-job", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.Int("id", 0, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return fmt.Errorf("--id is required")
+	}
+	body, err := client.RawSyncJob(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	return writeRawBody(stdout, body)
+}
+
+func hertwillSyncJobHelp(w io.Writer) {
+	fmt.Fprintln(w, "Show Hertwill's sync job for one catalog product, including recorded errors.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd hertwill sync-job --id <ID>")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Prints the raw JSON from GET /v1/sync/jobs/{productId}. Read-only.")
+}

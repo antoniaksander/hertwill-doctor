@@ -226,3 +226,10 @@ func (c Client) postJSON(ctx context.Context, path string, value any) ([]byte, e
 	}
 	return body, nil
 }
+
+// RawSyncJob returns the raw GET /v1/sync/jobs/{productId} response for one
+// catalog product, including any sync error details Hertwill recorded.
+func (c Client) RawSyncJob(ctx context.Context, productID int) ([]byte, error) {
+	body, _, err := c.getBytes(ctx, strings.ReplaceAll(SyncJobPath, "{productId}", strconv.Itoa(productID)), nil)
+	return body, err
+}
