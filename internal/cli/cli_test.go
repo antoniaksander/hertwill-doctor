@@ -988,6 +988,9 @@ func clearConfigEnv(t *testing.T) {
 		"HERTWILL_EMAIL",
 		"HERTWILL_PASSWORD",
 		"HWD_TIMEOUT_SECONDS",
+		"HWD_ENV_FILE",
+		"HWD_STORE_NAME",
+		"HERTWILL_API_KEY",
 	} {
 		t.Setenv(key, "")
 	}

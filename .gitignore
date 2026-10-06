@@ -24,8 +24,11 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env files (one per store); keep the example
 .env
+*.env
+!.env.example
+stores/
 
 # Editor/IDE
 # .idea/

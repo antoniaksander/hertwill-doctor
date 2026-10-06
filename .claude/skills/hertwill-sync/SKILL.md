@@ -12,6 +12,7 @@ description: Import and sync Hertwill dropshipping products to the connected Woo
 - Run every command from the hertwill-doctor directory, because `hwd` loads `.env` from the current directory. The directory is in the `HWD_DIR` environment variable; if it's unset, ask the user where hertwill-doctor is.
   - macOS/Linux: `cd "$HWD_DIR" && ./hwd ...`
   - Windows PowerShell: `Set-Location $env:HWD_DIR; .\hwd.exe ...`
+- Run `hwd doctor` first and tell the user which store it shows (`Store:` line). For several stores, set `HWD_ENV_FILE` to that store's config file (see `docs/setup.md`).
 - Never read, print or edit `.env`. It holds the Hertwill key and WooCommerce credentials. Check config with `hwd doctor`.
 - If `hwd` is missing, build it: `go build -o hwd ./cmd/hwd` (`hwd.exe` on Windows).
 
