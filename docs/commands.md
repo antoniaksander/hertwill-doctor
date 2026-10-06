@@ -118,6 +118,31 @@ Future note: pagination may add `--page`.
 
 `hwd hertwill sync-status --id <ID>` does not call `/v1/products/{id}/sync-status`; that endpoint is unverified (see `docs/hertwill-endpoints.md`). The command exits with a non-zero status code and prints `Hertwill sync-status endpoint is not verified yet.` on stderr instead of making the request or pretending success. Once the endpoint is verified in `internal/hertwill/endpoints.go`, this command will call it normally.
 
+## Hertwill import list and sync
+
+```sh
+hwd hertwill import-list
+hwd hertwill import-list --status synced --json
+hwd hertwill import-list --contains "breden"
+hwd hertwill import --ids 8096,8097 --dry-run
+hwd hertwill import --ids 8096,8097 --confirm
+hwd hertwill sync --id 9107 --price 40.95 --dry-run
+hwd hertwill sync --file prices.txt --confirm --json
+```
+
+`import-list` fetches every page of `GET /v1/import-list` (20 per page). Without `--status`, Hertwill returns only products that are not synced yet. Columns: catalog ID, name, import status, wholesale cost, variant count, SKU. `--json` adds `product_id` (store dropship ID) and each variation's `id` and `dropship_id`.
+
+`import` requires exactly one of `--dry-run`/`--confirm`. It reads the import list first and only posts IDs that are not already in it. Hertwill answers per ID with `added`, `already_exists`, `not_found` or `error`.
+
+`sync` requires exactly one of `--dry-run`/`--confirm`, and either `--id` with `--price` or `--file`. `--price` is the absolute selling price in `--currency` (default `EUR`). Each request body is:
+
+```json
+{"product_id": 9107, "default_store_markup": 40.95, "currency": "EUR",
+ "variations": [{"id": 20610, "dropship_id": 3253249, "default_store_markup": 40.95}]}
+```
+
+Refused locally (no request sent): product not in the unsynced import list, or price below its wholesale cost. With `--confirm`, requests are sent one at a time with `--delay-ms` (default 1000) between them; a failed product is reported with Hertwill's error code and message, and the command continues. Exit code is non-zero if any product failed or was refused. JSON output includes `entries` (id, name, cost, price, variations, result, error, refused_reason) and `started`/`failed`/`refused` counts.
+
 ## Diagnose
 
 ```sh

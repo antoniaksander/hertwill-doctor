@@ -762,6 +762,24 @@ func runHertwill(args []string, stdout, _ io.Writer, g globals, cfg config.Confi
 			fmt.Fprintln(stdout, "Use --raw to inspect the Hertwill response shape.")
 		}
 		return nil
+	case "import-list":
+		if hasHelpArg(args[1:]) {
+			hertwillImportListHelp(stdout)
+			return nil
+		}
+		return runHertwillImportList(args[1:], stdout, g, client, stats)
+	case "import":
+		if hasHelpArg(args[1:]) {
+			hertwillImportHelp(stdout)
+			return nil
+		}
+		return runHertwillImport(args[1:], stdout, g, client, stats)
+	case "sync":
+		if hasHelpArg(args[1:]) {
+			hertwillSyncHelp(stdout)
+			return nil
+		}
+		return runHertwillSync(args[1:], stdout, g, client, stats)
 	case "sync-status":
 		if hasHelpArg(args[1:]) {
 			hertwillSyncStatusHelp(stdout)
@@ -1587,6 +1605,12 @@ func hertwillHelpFor(args []string, w io.Writer) {
 		hertwillSyncStatusHelp(w)
 	case "list":
 		hertwillListHelp(w)
+	case "import-list":
+		hertwillImportListHelp(w)
+	case "import":
+		hertwillImportHelp(w)
+	case "sync":
+		hertwillSyncHelp(w)
 	default:
 		hertwillHelp(w)
 	}
@@ -1693,7 +1717,7 @@ func wooRepairImagesHelp(w io.Writer) {
 }
 
 func hertwillHelp(w io.Writer) {
-	fmt.Fprintln(w, "Hertwill API diagnostics.")
+	fmt.Fprintln(w, "Hertwill API diagnostics, import list and sync.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage: hwd hertwill <command>")
 	fmt.Fprintln(w)
@@ -1701,6 +1725,9 @@ func hertwillHelp(w io.Writer) {
 	fmt.Fprintln(w, "  list         List Hertwill products")
 	fmt.Fprintln(w, "  product      Look up a Hertwill product by ID")
 	fmt.Fprintln(w, "  search       Search Hertwill products")
+	fmt.Fprintln(w, "  import-list  List the store's import list with variant counts")
+	fmt.Fprintln(w, "  import       Add products to the import list (--dry-run | --confirm)")
+	fmt.Fprintln(w, "  sync         Sync import-list products at a selling price (--dry-run | --confirm)")
 	fmt.Fprintln(w, "  sync-status  Show Hertwill sync status for a product")
 }
 
