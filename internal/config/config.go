@@ -26,6 +26,11 @@ type Config struct {
 	HertwillEmail       string
 	HertwillPassword    string
 
+	// StoreName labels which store this config points at (HWD_STORE_NAME).
+	StoreName string
+	// EnvFile is the config file that was read: HWD_ENV_FILE, or ".env".
+	EnvFile string
+
 	TimeoutSeconds int
 	Warnings       []string
 	LoadedDotEnv   bool
@@ -37,18 +42,28 @@ type Source struct {
 
 func Load() Config {
 	source := Source{values: map[string]string{}}
-	loaded, _ := loadDotEnv(".env", source.values)
+	envFile := strings.TrimSpace(os.Getenv("HWD_ENV_FILE"))
+	explicit := envFile != ""
+	if !explicit {
+		envFile = ".env"
+	}
+	loaded, _ := loadDotEnv(envFile, source.values)
 
 	cfg := Config{
 		WooBaseURL:          source.Get("WOO_BASE_URL"),
 		WooConsumerKey:      source.Get("WOO_CONSUMER_KEY"),
 		WooConsumerSecret:   source.Get("WOO_CONSUMER_SECRET"),
 		HertwillBaseURL:     source.Get("HERTWILL_BASE_URL"),
-		HertwillAccessToken: source.Get("HERTWILL_ACCESS_TOKEN"),
+		HertwillAccessToken: firstNonEmpty(source.Get("HERTWILL_ACCESS_TOKEN"), source.Get("HERTWILL_API_KEY")),
 		HertwillEmail:       source.Get("HERTWILL_EMAIL"),
 		HertwillPassword:    source.Get("HERTWILL_PASSWORD"),
+		StoreName:           source.Get("HWD_STORE_NAME"),
+		EnvFile:             envFile,
 		TimeoutSeconds:      DefaultTimeoutSeconds,
 		LoadedDotEnv:        loaded,
+	}
+	if explicit && !loaded {
+		cfg.Warnings = append(cfg.Warnings, "HWD_ENV_FILE "+envFile+" could not be read")
 	}
 
 	if raw := source.Get("HWD_TIMEOUT_SECONDS"); raw != "" {
@@ -61,6 +76,15 @@ func Load() Config {
 	}
 
 	return cfg
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s Source) Get(key string) string {

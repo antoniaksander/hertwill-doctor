@@ -133,6 +133,12 @@ type doctorCheck struct {
 }
 
 type doctorResult struct {
+	Store struct {
+		Name         string `json:"name"`
+		WooCommerce  string `json:"woocommerce_url"`
+		ConfigFile   string `json:"config_file"`
+		ConfigLoaded bool   `json:"config_loaded"`
+	} `json:"store"`
 	ConfigChecks struct {
 		WooCommerce config.Validation `json:"woocommerce"`
 		Hertwill    config.Validation `json:"hertwill"`
@@ -175,6 +181,10 @@ func runDoctor(args []string, stdout, stderr io.Writer, g globals, cfg config.Co
 	if result.Warnings == nil {
 		result.Warnings = []string{}
 	}
+	result.Store.Name = fallback(cfg.StoreName)
+	result.Store.WooCommerce = fallback(cfg.WooBaseURL)
+	result.Store.ConfigFile = cfg.EnvFile
+	result.Store.ConfigLoaded = cfg.LoadedDotEnv
 	result.ConfigChecks.WooCommerce = woo
 	result.ConfigChecks.Hertwill = hw
 	result.ConfigChecks.Timeout = doctorCheck{OK: true, Status: "ok", Message: fmt.Sprintf("%d seconds", cfg.TimeoutSeconds)}
@@ -185,6 +195,12 @@ func runDoctor(args []string, stdout, stderr io.Writer, g globals, cfg config.Co
 		return writeJSON(stdout, result)
 	}
 	fmt.Fprintln(stdout, "Hertwill Doctor")
+	loadedNote := "loaded"
+	if !cfg.LoadedDotEnv {
+		loadedNote = "not found"
+	}
+	fmt.Fprintf(stdout, "Store: %s (%s)\n", result.Store.Name, result.Store.WooCommerce)
+	fmt.Fprintf(stdout, "Config file: %s (%s)\n", cfg.EnvFile, loadedNote)
 	fmt.Fprintf(stdout, "WooCommerce config: %s\n", statusLine(woo))
 	fmt.Fprintf(stdout, "Hertwill config: %s\n", statusLine(hw))
 	fmt.Fprintf(stdout, "HTTP timeout: %d seconds\n", cfg.TimeoutSeconds)

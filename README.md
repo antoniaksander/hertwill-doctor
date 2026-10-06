@@ -53,7 +53,7 @@ Configuration precedence:
 3. `.env` file
 4. built-in defaults
 
-Environment variables override `.env` values.
+Environment variables override `.env` values. Set `HWD_ENV_FILE` to read a different file, for example one per store (see [docs/setup.md](docs/setup.md)); `HWD_STORE_NAME` labels the store in `hwd doctor`.
 
 WooCommerce configuration is valid only if all are present:
 
@@ -247,6 +247,9 @@ Only available response fields are compared. Unavailable fields are shown as `n/
 
 ## Documentation
 
+- [Setup: new machine, new store, Claude Code and Codex](docs/setup.md)
+- [Starting prompt for a new AI chat](docs/starting-prompt.md)
+- [Agent guide](AGENTS.md)
 - [Commands](docs/commands.md)
 - [Configuration](docs/configuration.md)
 - [Hertwill endpoints](docs/hertwill-endpoints.md)
