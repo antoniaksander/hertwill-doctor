@@ -30,6 +30,17 @@ If the user only points you at this repo (URL or folder) and gives no other cont
 - **Always run `hwd doctor` first** and tell the user which store it shows (`Store:` line). If it is not the store the user means, stop.
 - **Never read, print or edit `.env` files** or any key. Don't type keys into commands. If config is missing, tell the user which variable to set.
 
+## Before proposing prices
+
+Ask the user for anything the task doesn't already say. Don't assume:
+
+- **VAT rate** the selling price includes, and whether the Hertwill cost is excl. VAT (it is).
+- **Discount codes** customers usually use (e.g. a 10% welcome code), so profit is shown with and without them.
+- **Price-ending style**: e.g. match the brand's own shop (.90, .95, .50), or a fixed ending. Check the brand's shop if unsure.
+- **Which products to stay in line with**: usually the same brand's products already in the shop.
+
+Compare **in-stock** listings only and give links. Show cost, proposed price, and profit at full price and after the usual discount. Profit excludes shipping and payment fees; say so.
+
 ## Safety rules
 
 - Every write needs `--dry-run` or `--confirm`. Run the dry run, show the result, and get the user's OK before every `--confirm`.

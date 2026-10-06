@@ -80,7 +80,9 @@ Restart Claude Code; `/skills` should list `hertwill-sync`. Inside this repo, Cl
 
 ### Codex
 
-Codex reads `AGENTS.md` automatically inside this repo. From another project (for example the shop's theme), start the chat with the prompt in `docs/starting-prompt.md`, which tells it to read `AGENTS.md` and the workflow first.
+Codex reads `AGENTS.md` automatically inside this repo.
+
+**Allow network access.** Codex's sandbox blocks the internet by default, but `hwd` and competitor price checks need it. Approve network access when Codex asks, or start it with network enabled. Without it, `hwd doctor` reports WooCommerce as unreachable even when your keys are fine. From another project (for example the shop's theme), start the chat with the prompt in `docs/starting-prompt.md`, which tells it to read `AGENTS.md` and the workflow first.
 
 ## 5. Start working
 

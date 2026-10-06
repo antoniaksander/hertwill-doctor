@@ -31,7 +31,7 @@ description: Import and sync Hertwill dropshipping products to the connected Woo
 
 1. **See what's there.** `hwd hertwill import-list` (add `--contains <text>` to filter, `--json` for details). Show the user a short table: ID, name, cost, variant count.
 2. **Add missing products** if the user named ones not in the list: `hwd hertwill import --ids <ids> --dry-run`, show the result, then `--confirm` after the user agrees.
-3. **Agree on prices.** The user decides selling prices. If they give a rule (e.g. "cost × 2, rounded up to .95"), compute each price, show a table of ID, name, cost and price, and get approval. Never invent prices.
+3. **Agree on prices.** The user decides selling prices. First confirm the VAT rate, usual discount codes, price-ending style and which existing products to stay in line with (see "Before proposing prices" in AGENTS.md). If they give a rule (e.g. "cost × 2, rounded up to .95"), compute each price. Show a table of ID, name, cost, price and profit (full price and after the discount), and get approval. Compare in-stock competitor listings only. Never invent prices.
 4. **Write a price file** in a temp/scratch location, one `<id> <price>` per line.
 5. **Dry run:** `hwd hertwill sync --file <path> --dry-run`. Fix anything refused.
 6. **Test one product first** on a new batch: `hwd hertwill sync --id <id> --price <price> --confirm`, then check it in WooCommerce (WooCommerce MCP or `hwd woo product --sku <sku>`): price and status.
