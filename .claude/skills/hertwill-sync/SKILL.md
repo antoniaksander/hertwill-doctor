@@ -35,6 +35,7 @@ description: Import and sync Hertwill dropshipping products to the connected Woo
 6. **Test one product first** on a new batch: `hwd hertwill sync --id <id> --price <price> --confirm`, then check it in WooCommerce (WooCommerce MCP or `hwd woo product --sku <sku>`): price and status.
 7. **Sync the rest** after the user says go: `hwd hertwill sync --file <path> --confirm --json`.
 8. **Brand and categories**, if the user asked: dry run, then `--confirm`.
-9. **Report** one table from WooCommerce: name, price, status. List failures with Hertwill's error message. Don't publish or edit products in WooCommerce unless the user asks.
+9. **Publish** only when the user asks: `hwd woo set-status --id <woo id> --status publish --dry-run`, then `--confirm`.
+10. **Report** one table from WooCommerce: name, price, status. List failures with Hertwill's error message. Don't publish or edit products in WooCommerce unless the user asks.
 
 Ask before every `--confirm` run. Dry runs and read commands are fine without asking.

@@ -102,3 +102,21 @@ func TestWooSetTermsValidation(t *testing.T) {
 		t.Fatalf("invalid input sent PUT: %v", puts)
 	}
 }
+
+func TestWooSetStatusSendsOnlyStatus(t *testing.T) {
+	var puts []string
+	newTermsWooServer(t, &puts)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-status", "--id", "31968", "--status", "publish", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 || len(puts) != 0 {
+		t.Fatalf("dry run: code=%d puts=%v stderr=%q", code, puts, stderr.String())
+	}
+	if code := Run([]string{"woo", "set-status", "--id", "31968", "--status", "publish", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if len(puts) != 1 || puts[0] != `{"status":"publish"}` {
+		t.Fatalf("PUT bodies = %v", puts)
+	}
+	if code := Run([]string{"woo", "set-status", "--id", "31968", "--status", "trash", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected trash to be rejected")
+	}
+}

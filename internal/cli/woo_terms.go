@@ -151,3 +151,70 @@ func wooSetTermsHelp(w io.Writer) {
 	fmt.Fprintln(w, "Use \"none\" to clear a list. Only categories and brands are sent: price, stock,")
 	fmt.Fprintln(w, "status and content are never touched, and the product is never published.")
 }
+
+var allowedStatuses = map[string]bool{"publish": true, "private": true, "draft": true, "pending": true}
+
+type setStatusReport struct {
+	Mode           string           `json:"mode"`
+	ProductID      string           `json:"product_id"`
+	Name           string           `json:"name,omitempty"`
+	Before         string           `json:"before"`
+	Requested      string           `json:"requested"`
+	After          string           `json:"after,omitempty"`
+	RequestSummary *httpstats.Stats `json:"request_summary,omitempty"`
+}
+
+func runWooSetStatus(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo set-status", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.String("id", "", "")
+	status := fs.String("status", "", "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	if *id == "" {
+		return fmt.Errorf("--id is required")
+	}
+	if !allowedStatuses[*status] {
+		return fmt.Errorf("--status must be one of publish, private, draft, pending")
+	}
+	product, err := client.ProductByID(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	report := setStatusReport{Mode: "dry-run", ProductID: product.ID, Name: product.Name, Before: product.Status, Requested: *status}
+	if *confirm {
+		report.Mode = "confirm"
+		updated, err := client.UpdateProductStatus(context.Background(), *id, *status)
+		if err != nil {
+			return err
+		}
+		report.After = updated.Status
+	}
+	if g.json {
+		snapshot := stats.Snapshot()
+		report.RequestSummary = &snapshot
+		return writeJSON(stdout, report)
+	}
+	fmt.Fprintf(stdout, "Product: %s %s\n", report.ProductID, report.Name)
+	fmt.Fprintf(stdout, "Status:  %s -> %s\n", report.Before, report.Requested)
+	if report.After == "" {
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		return nil
+	}
+	fmt.Fprintf(stdout, "Now:     %s\n", report.After)
+	return nil
+}
+
+func wooSetStatusHelp(w io.Writer) {
+	fmt.Fprintln(w, "Change a WooCommerce product's status, e.g. publish a private product.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo set-status --id <ID> --status <publish|private|draft|pending> (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Only the status field is sent; nothing else on the product changes.")
+}

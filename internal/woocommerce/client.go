@@ -167,6 +167,20 @@ func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, 
 	return product.toModel(), nil
 }
 
+// UpdateProductStatus changes only a product's post status (publish,
+// private, draft or pending) via PUT /products/{id}.
+func (c Client) UpdateProductStatus(ctx context.Context, id, status string) (model.Product, error) {
+	body, err := json.Marshal(map[string]string{"status": status})
+	if err != nil {
+		return model.Product{}, err
+	}
+	var product wooProduct
+	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, "WooCommerce PUT status: "+status, &product); err != nil {
+		return model.Product{}, err
+	}
+	return product.toModel(), nil
+}
+
 func (c Client) get(ctx context.Context, path string, query url.Values, target any) error {
 	base, err := url.Parse(strings.TrimRight(c.BaseURL, "/"))
 	if err != nil {
