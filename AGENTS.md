@@ -15,6 +15,14 @@ It replaces the `@hertwill/mcp` write tools, which can't sync products with vari
 
 The tool is generic: no client-specific logic. Pricing rules, categories and brands come from the user, per task.
 
+## Starting from zero context
+
+If the user only points you at this repo (URL or folder) and gives no other context:
+
+1. Find the local copy: `$HWD_DIR` (Windows: `$env:HWD_DIR`), or ask where it is. If there is none, offer to clone and build it, and point the user to `docs/setup.md` to create their `.env` themselves.
+2. Build `hwd` if it's missing, then run `hwd doctor` and report the `Store:` line and whether both APIs are configured.
+3. Ask what they want to do. Don't start syncing or changing anything on your own.
+
 ## Setup and which store
 
 - Build: `go build -o hwd ./cmd/hwd` (`hwd.exe` on Windows). Tests: `go test ./...`.

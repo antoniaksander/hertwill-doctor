@@ -1,6 +1,13 @@
 # Starting prompt
 
-Paste this as the first message of a new Claude Code or Codex chat, from any project. Replace the store name if you have several.
+Shortest version, enough for most chats:
+
+```text
+Use https://github.com/antoniaksander/hertwill-doctor to manage my Hertwill products in WooCommerce.
+My local copy is in $HWD_DIR. Read its AGENTS.md first, run hwd doctor, then wait for my task.
+```
+
+Longer version with every rule spelled out. Paste this as the first message of a new Claude Code or Codex chat, from any project. Replace the store name if you have several.
 
 ```text
 I manage a WooCommerce shop whose products come from Hertwill. Use Hertwill Doctor (hwd) for anything Hertwill or WooCommerce.

@@ -1,14 +1,63 @@
 # Hertwill Doctor
 
-Hertwill Doctor is a generic public Go CLI for diagnosing Hertwill API and WooCommerce sync/import issues.
+**Manage your Hertwill dropshipping products in WooCommerce from the command line, or let an AI agent (Claude Code, Codex) do it for you.**
 
-The CLI command is:
+If you sell [Hertwill](https://hertwill.com) products in a WooCommerce shop, `hwd` lets you:
 
-```sh
-hwd
+- see your Hertwill import list, with costs and variants
+- add products to the import list and sync them to your shop at the price you choose
+- set categories, brand and publish status in WooCommerce
+- find out why a product looks wrong (missing images, wrong price, failed sync)
+
+It talks to the Hertwill and WooCommerce APIs directly. Every change needs an explicit `--dry-run` or `--confirm`, prices are always the final selling price, and synced products stay private until you publish them.
+
+## Quick start
+
+1. You need Go 1.22+, a Hertwill API key, and a WooCommerce REST API key with Read/Write access.
+2. Build and configure:
+
+   ```sh
+   git clone https://github.com/antoniaksander/hertwill-doctor.git
+   cd hertwill-doctor
+   go build -o hwd ./cmd/hwd
+   cp .env.example .env    # fill in your store name and keys
+   ./hwd doctor
+   ./hwd hertwill import-list
+   ```
+
+3. Sync a product at your price, check it, then publish:
+
+   ```sh
+   ./hwd hertwill sync --id 9107 --price 40.95 --dry-run
+   ./hwd hertwill sync --id 9107 --price 40.95 --confirm
+   ./hwd woo product --sku <sku>
+   ./hwd woo set-status --id <woo id> --status publish --confirm
+   ```
+
+Full setup, including several stores and Windows: [docs/setup.md](docs/setup.md).
+
+## Use it with an AI agent
+
+Start a new Claude Code or Codex chat with no context and just point it at this repo:
+
+```text
+Use https://github.com/antoniaksander/hertwill-doctor to manage my Hertwill products in WooCommerce.
+My local copy is in $HWD_DIR. Read its AGENTS.md first, run hwd doctor, then wait for my task.
 ```
 
-Most commands are read-only. The only writes are `hwd hertwill import`, `hwd hertwill sync`, `hwd woo repair-images`, `hwd woo set-terms` and `hwd woo set-status`, and each requires an explicit `--dry-run` or `--confirm`. It only publishes via an explicit `hwd woo set-status --status publish --confirm`, and never edits content of or deletes products, and has no direct SQL, SSH, Hostinger-specific or Roxder-specific logic.
+The agent reads [AGENTS.md](AGENTS.md) (scope, safety rules, workflow), checks which store it is connected to, and asks before every change. For a longer version with options, see [docs/starting-prompt.md](docs/starting-prompt.md). Claude Code users can also install the `hertwill-sync` skill (see setup).
+
+Then ask in plain words, for example: *"Show the Breden products in my import list, check competitor prices and propose profitable prices. Keep them private until I approve."*
+
+## What it can't do (yet)
+
+- Re-syncing a product that is already live can fail on Hertwill's side and leaves it private; `hwd` warns about this but can't fix it.
+- Products Hertwill hasn't approved for your store return 403 and must be unblocked in Hertwill.
+- No order handling: `hwd` covers products only.
+
+---
+
+# Reference
 
 ## Install / Build
 
@@ -269,3 +318,4 @@ Only available response fields are compared. Unavailable fields are shown as `n/
 - spinner/progress indicator
 - pagination with `--page`
 - optional experimental endpoint probing, but not by default
+- order and stock commands
