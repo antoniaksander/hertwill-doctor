@@ -195,3 +195,34 @@ func TestWooTrashNeverForces(t *testing.T) {
 		t.Fatalf("DELETE queries = %v", deletes)
 	}
 }
+
+func TestWooReplaceSendsOnlyThatField(t *testing.T) {
+	var puts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			body, _ := io.ReadAll(r.Body)
+			puts = append(puts, string(body))
+			w.Write([]byte(`{"id":1,"name":"X","slug":"x","short_description":"<p>Candledust candles</p>","images":[]}`))
+			return
+		}
+		w.Write([]byte(`{"id":1,"name":"X","slug":"x","short_description":"<p>Candlelust candles</p>","images":[]}`))
+	}))
+	defer server.Close()
+	clearConfigEnv(t)
+	setWooEnv(t, server.URL)
+	var stdout, stderr bytes.Buffer
+	args := []string{"woo", "replace", "--id", "1", "--field", "short_description", "--find", "Candlelust", "--replace", "Candledust"}
+	if code := Run(append(args, "--dry-run"), &stdout, &stderr, BuildInfo{}); code != 0 || len(puts) != 0 {
+		t.Fatalf("dry run: code=%d puts=%v stderr=%q", code, puts, stderr.String())
+	}
+	if code := Run(append(args, "--confirm"), &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	var sent map[string]string
+	if len(puts) != 1 || json.Unmarshal([]byte(puts[0]), &sent) != nil || len(sent) != 1 || sent["short_description"] != "<p>Candledust candles</p>" {
+		t.Fatalf("PUT bodies = %v", puts)
+	}
+	if code := Run([]string{"woo", "replace", "--id", "1", "--field", "short_description", "--find", "Nope", "--replace", "x", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 || len(puts) != 1 {
+		t.Fatal("expected refusal when text is not found")
+	}
+}

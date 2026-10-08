@@ -182,6 +182,39 @@ func (c Client) UpdateProductPrice(ctx context.Context, id, regularPrice string)
 	return product.toModel(), nil
 }
 
+// ProductFields returns the raw text fields that ReplaceInField can edit.
+func (c Client) ProductFields(ctx context.Context, id string) (map[string]string, error) {
+	var product wooProduct
+	if err := c.get(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), nil, &product); err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"name":              product.Name,
+		"slug":              product.Slug,
+		"short_description": product.ShortDesc,
+		"description":       product.Description,
+	}, nil
+}
+
+// UpdateProductField sets one text field (name, slug, short_description or
+// description) via PUT /products/{id}, sending only that field.
+func (c Client) UpdateProductField(ctx context.Context, id, field, value string) (map[string]string, error) {
+	body, err := json.Marshal(map[string]string{field: value})
+	if err != nil {
+		return nil, err
+	}
+	var product wooProduct
+	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, "WooCommerce PUT "+field, &product); err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"name":              product.Name,
+		"slug":              product.Slug,
+		"short_description": product.ShortDesc,
+		"description":       product.Description,
+	}, nil
+}
+
 // UpdateProductName changes only a product's name via PUT /products/{id}.
 // The slug (URL) is left as it is.
 func (c Client) UpdateProductName(ctx context.Context, id, name string) (model.Product, error) {
@@ -376,6 +409,9 @@ type wooProduct struct {
 	RegularPrice  string    `json:"regular_price"`
 	SalePrice     string    `json:"sale_price"`
 	Type          string    `json:"type"`
+	Slug          string    `json:"slug"`
+	ShortDesc     string    `json:"short_description"`
+	Description   string    `json:"description"`
 	StockStatus   string    `json:"stock_status"`
 	Status        string    `json:"status"`
 	Images        []any     `json:"images"`
