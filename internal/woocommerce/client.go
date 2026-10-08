@@ -181,6 +181,20 @@ func (c Client) UpdateProductPrice(ctx context.Context, id, regularPrice string)
 	return product.toModel(), nil
 }
 
+// UpdateProductName changes only a product's name via PUT /products/{id}.
+// The slug (URL) is left as it is.
+func (c Client) UpdateProductName(ctx context.Context, id, name string) (model.Product, error) {
+	body, err := json.Marshal(map[string]string{"name": name})
+	if err != nil {
+		return model.Product{}, err
+	}
+	var product wooProduct
+	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, "WooCommerce PUT name", &product); err != nil {
+		return model.Product{}, err
+	}
+	return product.toModel(), nil
+}
+
 // UpdateProductStatus changes only a product's post status (publish,
 // private, draft or pending) via PUT /products/{id}.
 func (c Client) UpdateProductStatus(ctx context.Context, id, status string) (model.Product, error) {

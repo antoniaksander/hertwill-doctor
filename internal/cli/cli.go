@@ -332,6 +332,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetTerms(args[1:], stdout, g, client, stats)
+	case "set-name":
+		if hasHelpArg(args[1:]) {
+			wooSetNameHelp(stdout)
+			return nil
+		}
+		return runWooSetName(args[1:], stdout, g, client, stats)
 	case "set-price":
 		if hasHelpArg(args[1:]) {
 			wooSetPriceHelp(stdout)
@@ -1632,6 +1638,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooSetStatusHelp(w)
 	case "set-price":
 		wooSetPriceHelp(w)
+	case "set-name":
+		wooSetNameHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1716,6 +1724,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories and/or brands (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
 	fmt.Fprintln(w, "  set-price      Change simple products' regular price (write operation)")
+	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
 }
 
 func wooProductHelp(w io.Writer) {

@@ -356,3 +356,53 @@ func wooSetPriceHelp(w io.Writer) {
 	fmt.Fprintln(w, "Only regular_price is sent. Variable products are refused; a sale price is reported.")
 	fmt.Fprintln(w, "Note: a later Hertwill re-sync of the product may set its own price again.")
 }
+
+func runWooSetName(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo set-name", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.String("id", "", "")
+	name := fs.String("name", "", "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	newName := strings.TrimSpace(*name)
+	if *id == "" || newName == "" {
+		return fmt.Errorf("--id and --name are required")
+	}
+	product, err := client.ProductByID(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	result := map[string]string{"mode": "dry-run", "product_id": product.ID, "before": product.Name, "requested": newName}
+	if *confirm {
+		result["mode"] = "confirm"
+		updated, err := client.UpdateProductName(context.Background(), *id, newName)
+		if err != nil {
+			return err
+		}
+		result["after"] = updated.Name
+	}
+	if g.json {
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "Product: %s\nName:    %s -> %s\n", product.ID, product.Name, newName)
+	if result["after"] == "" {
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		return nil
+	}
+	fmt.Fprintf(stdout, "Now:     %s\n", result["after"])
+	return nil
+}
+
+func wooSetNameHelp(w io.Writer) {
+	fmt.Fprintln(w, "Change a WooCommerce product's name (title). The URL slug is not changed.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo set-name --id <ID> --name <NAME> (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Only the name field is sent. A later Hertwill re-sync may set its own name again.")
+}
