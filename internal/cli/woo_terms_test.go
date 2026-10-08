@@ -155,3 +155,18 @@ func TestWooSetPriceRefusesVariableProducts(t *testing.T) {
 		t.Fatalf("puts=%d stdout=%s", puts, stdout.String())
 	}
 }
+
+func TestWooSetNameSendsOnlyName(t *testing.T) {
+	var puts []string
+	newTermsWooServer(t, &puts)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-name", "--id", "31968", "--name", "New Name", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 || len(puts) != 0 {
+		t.Fatalf("dry run: code=%d puts=%v stderr=%q", code, puts, stderr.String())
+	}
+	if code := Run([]string{"woo", "set-name", "--id", "31968", "--name", "New Name", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if len(puts) != 1 || puts[0] != `{"name":"New Name"}` {
+		t.Fatalf("PUT bodies = %v", puts)
+	}
+}

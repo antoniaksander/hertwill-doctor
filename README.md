@@ -152,6 +152,7 @@ hwd woo repair-images --sku ABC123 --hertwill-id 123 --dry-run
 hwd woo set-terms --id 31968 --categories 54,765 --brands 780 --dry-run
 hwd woo set-status --id 31968 --status publish --dry-run
 hwd woo set-price --id 9415 --price 32.50 --dry-run
+hwd woo set-name --id 1636 --name "New name" --dry-run
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --confirm
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --max-images 1 --confirm
 ```
