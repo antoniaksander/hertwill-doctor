@@ -167,6 +167,20 @@ func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, 
 	return product.toModel(), nil
 }
 
+// UpdateProductPrice sets only a simple product's regular price via
+// PUT /products/{id}.
+func (c Client) UpdateProductPrice(ctx context.Context, id, regularPrice string) (model.Product, error) {
+	body, err := json.Marshal(map[string]string{"regular_price": regularPrice})
+	if err != nil {
+		return model.Product{}, err
+	}
+	var product wooProduct
+	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, "WooCommerce PUT regular_price: "+regularPrice, &product); err != nil {
+		return model.Product{}, err
+	}
+	return product.toModel(), nil
+}
+
 // UpdateProductStatus changes only a product's post status (publish,
 // private, draft or pending) via PUT /products/{id}.
 func (c Client) UpdateProductStatus(ctx context.Context, id, status string) (model.Product, error) {
@@ -323,6 +337,9 @@ type wooProduct struct {
 	Name          string    `json:"name"`
 	SKU           string    `json:"sku"`
 	Price         string    `json:"price"`
+	RegularPrice  string    `json:"regular_price"`
+	SalePrice     string    `json:"sale_price"`
+	Type          string    `json:"type"`
 	StockStatus   string    `json:"stock_status"`
 	Status        string    `json:"status"`
 	Images        []any     `json:"images"`
@@ -356,6 +373,9 @@ func (p wooProduct) toModel() model.Product {
 		Name:       p.Name,
 		SKU:        p.SKU,
 		Price:      p.Price,
+		Regular:    p.RegularPrice,
+		Sale:       p.SalePrice,
+		Type:       p.Type,
 		Stock:      stock,
 		ImageCount: &imageCount,
 		Status:     p.Status,

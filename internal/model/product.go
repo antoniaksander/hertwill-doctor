@@ -6,6 +6,9 @@ type Product struct {
 	Name       string      `json:"name,omitempty"`
 	SKU        string      `json:"sku,omitempty"`
 	Price      string      `json:"price,omitempty"`
+	Regular    string      `json:"regular_price,omitempty"`
+	Sale       string      `json:"sale_price,omitempty"`
+	Type       string      `json:"type,omitempty"`
 	Stock      string      `json:"stock,omitempty"`
 	ImageCount *int        `json:"image_count,omitempty"`
 	ImageURLs  []string    `json:"image_urls,omitempty"`

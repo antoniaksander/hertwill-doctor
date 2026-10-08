@@ -332,6 +332,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetTerms(args[1:], stdout, g, client, stats)
+	case "set-price":
+		if hasHelpArg(args[1:]) {
+			wooSetPriceHelp(stdout)
+			return nil
+		}
+		return runWooSetPrice(args[1:], stdout, g, client, stats)
 	case "set-status":
 		if hasHelpArg(args[1:]) {
 			wooSetStatusHelp(stdout)
@@ -1624,6 +1630,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooSetTermsHelp(w)
 	case "set-status":
 		wooSetStatusHelp(w)
+	case "set-price":
+		wooSetPriceHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1707,6 +1715,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories and/or brands (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
+	fmt.Fprintln(w, "  set-price      Change simple products' regular price (write operation)")
 }
 
 func wooProductHelp(w io.Writer) {
