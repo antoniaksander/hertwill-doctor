@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/antoniaksander/hertwill-doctor/internal/httpstats"
 	"github.com/antoniaksander/hertwill-doctor/internal/model"
@@ -217,4 +218,141 @@ func wooSetStatusHelp(w io.Writer) {
 	fmt.Fprintln(w, "Usage: hwd woo set-status --id <ID> --status <publish|private|draft|pending> (--dry-run | --confirm) [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Only the status field is sent; nothing else on the product changes.")
+}
+
+type setPriceEntry struct {
+	ProductID string  `json:"product_id"`
+	Name      string  `json:"name,omitempty"`
+	Status    string  `json:"status,omitempty"`
+	Before    string  `json:"before,omitempty"`
+	Price     float64 `json:"price"`
+	After     string  `json:"after,omitempty"`
+	Warning   string  `json:"warning,omitempty"`
+	Refused   string  `json:"refused_reason,omitempty"`
+	Error     string  `json:"error,omitempty"`
+}
+
+type setPriceReport struct {
+	Mode           string           `json:"mode"`
+	Entries        []setPriceEntry  `json:"entries"`
+	Changed        int              `json:"changed"`
+	Failed         int              `json:"failed"`
+	Refused        int              `json:"refused"`
+	RequestSummary *httpstats.Stats `json:"request_summary,omitempty"`
+}
+
+func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo set-price", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.Int("id", 0, "")
+	price := fs.Float64("price", 0, "")
+	file := fs.String("file", "", "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	if (*id != 0) == (*file != "") {
+		return fmt.Errorf("provide either --id with --price, or --file")
+	}
+	var targets []priceTarget
+	if *id != 0 {
+		if *price <= 0 {
+			return fmt.Errorf("--price must be the selling price incl. VAT, e.g. 16.50")
+		}
+		targets = []priceTarget{{ID: *id, Price: *price}}
+	} else {
+		parsed, err := readPriceFile(*file)
+		if err != nil {
+			return err
+		}
+		targets = parsed
+	}
+
+	report := setPriceReport{Mode: "dry-run"}
+	if *confirm {
+		report.Mode = "confirm"
+	}
+	for _, t := range targets {
+		wooID := strconv.Itoa(t.ID)
+		entry := setPriceEntry{ProductID: wooID, Price: t.Price}
+		product, err := client.ProductByID(context.Background(), wooID)
+		switch {
+		case err != nil:
+			entry.Refused = err.Error()
+		case product.Type == "variable":
+			entry.Refused = "variable product: prices are set on its variations"
+		}
+		if err == nil {
+			entry.Name, entry.Status, entry.Before = product.Name, product.Status, product.Regular
+			if product.Sale != "" {
+				entry.Warning = "has sale price " + product.Sale + "; customers still see the sale price"
+			}
+		}
+		if entry.Refused != "" {
+			report.Refused++
+		} else if *confirm {
+			updated, err := client.UpdateProductPrice(context.Background(), wooID, strconv.FormatFloat(t.Price, 'f', 2, 64))
+			if err != nil {
+				entry.Error = err.Error()
+				report.Failed++
+			} else {
+				entry.After = updated.Regular
+				report.Changed++
+			}
+		}
+		report.Entries = append(report.Entries, entry)
+	}
+
+	if g.json {
+		snapshot := stats.Snapshot()
+		report.RequestSummary = &snapshot
+		if err := writeJSON(stdout, report); err != nil {
+			return err
+		}
+	} else {
+		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintf(stdout, "Mode: %s (regular price incl. VAT)\n\n", report.Mode)
+		fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tBEFORE\tNEW\tRESULT")
+		for _, e := range report.Entries {
+			result := "would change"
+			switch {
+			case e.Refused != "":
+				result = "refused: " + e.Refused
+			case e.Error != "":
+				result = "failed: " + e.Error
+			case e.After != "":
+				result = "now " + e.After
+			}
+			if e.Warning != "" {
+				result += " (" + e.Warning + ")"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%.2f\t%s\n", e.ProductID, e.Name, e.Status, e.Before, e.Price, result)
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+		if report.Mode == "dry-run" {
+			fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		} else {
+			fmt.Fprintf(stdout, "\nChanged: %d, failed: %d, refused: %d\n", report.Changed, report.Failed, report.Refused)
+		}
+	}
+	if report.Failed > 0 || report.Refused > 0 {
+		return fmt.Errorf("%d failed, %d refused", report.Failed, report.Refused)
+	}
+	return nil
+}
+
+func wooSetPriceHelp(w io.Writer) {
+	fmt.Fprintln(w, "Change the regular price of simple WooCommerce products.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo set-price (--id <WOO ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "PRICE is the selling price incl. VAT. The file has one \"<woo id> <price>\" per line.")
+	fmt.Fprintln(w, "Only regular_price is sent. Variable products are refused; a sale price is reported.")
+	fmt.Fprintln(w, "Note: a later Hertwill re-sync of the product may set its own price again.")
 }

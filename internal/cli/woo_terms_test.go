@@ -120,3 +120,38 @@ func TestWooSetStatusSendsOnlyStatus(t *testing.T) {
 		t.Fatal("expected trash to be rejected")
 	}
 }
+
+func TestWooSetPriceSendsOnlyRegularPrice(t *testing.T) {
+	var puts []string
+	newTermsWooServer(t, &puts)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-price", "--id", "31968", "--price", "16.5", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 || len(puts) != 0 {
+		t.Fatalf("dry run: code=%d puts=%v stderr=%q", code, puts, stderr.String())
+	}
+	if code := Run([]string{"woo", "set-price", "--id", "31968", "--price", "16.5", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if len(puts) != 1 || puts[0] != `{"regular_price":"16.50"}` {
+		t.Fatalf("PUT bodies = %v", puts)
+	}
+}
+
+func TestWooSetPriceRefusesVariableProducts(t *testing.T) {
+	var puts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			puts++
+		}
+		w.Write([]byte(`{"id":5,"name":"Hat","type":"variable","status":"publish","regular_price":"","images":[]}`))
+	}))
+	defer server.Close()
+	clearConfigEnv(t)
+	setWooEnv(t, server.URL)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-price", "--id", "5", "--price", "20", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected refusal for a variable product")
+	}
+	if puts != 0 || !strings.Contains(stdout.String(), "variable product") {
+		t.Fatalf("puts=%d stdout=%s", puts, stdout.String())
+	}
+}
