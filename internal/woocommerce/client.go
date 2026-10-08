@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -277,6 +278,21 @@ func (c Client) get(ctx context.Context, path string, query url.Values, target a
 // request body when Debug is set, instead of the raw body bytes, so large
 // payloads (e.g. many image URLs) don't spam debug output.
 func (c Client) put(ctx context.Context, path string, body []byte, debugBodySummary string, target any) error {
+	return c.send(ctx, http.MethodPut, path, body, debugBodySummary, target)
+}
+
+// TrashProduct moves a product to the WooCommerce trash (bin) via
+// DELETE /products/{id} without force, so it can be restored from wp-admin.
+// It never deletes permanently.
+func (c Client) TrashProduct(ctx context.Context, id string) (model.Product, error) {
+	var product wooProduct
+	if err := c.send(ctx, http.MethodDelete, "/wp-json/wc/v3/products/"+url.PathEscape(id), nil, "WooCommerce DELETE (trash, no force)", &product); err != nil {
+		return model.Product{}, err
+	}
+	return product.toModel(), nil
+}
+
+func (c Client) send(ctx context.Context, method, path string, body []byte, debugBodySummary string, target any) error {
 	base, err := url.Parse(strings.TrimRight(c.BaseURL, "/"))
 	if err != nil {
 		return fmt.Errorf("invalid WooCommerce base URL: %w", err)
@@ -294,7 +310,13 @@ func (c Client) put(ctx context.Context, path string, body []byte, debugBodySumm
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPut, base.String(), bytes.NewReader(body))
+	q.Del("force")
+	base.RawQuery = q.Encode()
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, base.String(), reader)
 	if err != nil {
 		return err
 	}
@@ -305,7 +327,7 @@ func (c Client) put(ctx context.Context, path string, body []byte, debugBodySumm
 		safeQuery.Set("consumer_key", "****")
 		safeQuery.Set("consumer_secret", "****")
 		safeURL.RawQuery = safeQuery.Encode()
-		c.Debug("WooCommerce PUT " + safeURL.String())
+		c.Debug("WooCommerce " + method + " " + safeURL.String())
 		if debugBodySummary != "" {
 			c.Debug(debugBodySummary)
 		}

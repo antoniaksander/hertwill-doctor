@@ -406,3 +406,59 @@ func wooSetNameHelp(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Only the name field is sent. A later Hertwill re-sync may set its own name again.")
 }
+
+func runWooTrash(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo trash", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.String("id", "", "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	if *id == "" {
+		return fmt.Errorf("--id is required")
+	}
+	product, err := client.ProductByID(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	if product.Status == "trash" {
+		return fmt.Errorf("product %s is already in the trash", product.ID)
+	}
+	result := map[string]string{"mode": "dry-run", "product_id": product.ID, "name": product.Name, "sku": product.SKU, "before": product.Status}
+	if *confirm {
+		result["mode"] = "confirm"
+		if _, err := client.TrashProduct(context.Background(), *id); err != nil {
+			return err
+		}
+		// The DELETE response shows the product as it was before; re-read it.
+		after, err := client.ProductByID(context.Background(), *id)
+		if err != nil {
+			return err
+		}
+		result["after"] = after.Status
+	}
+	if g.json {
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "Product: %s %s (SKU %s)\nStatus:  %s -> trash\n", product.ID, product.Name, product.SKU, product.Status)
+	if result["after"] == "" {
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		return nil
+	}
+	fmt.Fprintf(stdout, "Now:     %s (restore it from Products > Trash in wp-admin)\n", result["after"])
+	return nil
+}
+
+func wooTrashHelp(w io.Writer) {
+	fmt.Fprintln(w, "Move a WooCommerce product to the trash (bin). It can be restored from wp-admin.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo trash --id <ID> (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Never deletes permanently. If the product is still on the Hertwill import list,")
+	fmt.Fprintln(w, "remove it there too, or a later sync may create it again.")
+}

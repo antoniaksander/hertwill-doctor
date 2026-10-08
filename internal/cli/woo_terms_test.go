@@ -170,3 +170,28 @@ func TestWooSetNameSendsOnlyName(t *testing.T) {
 		t.Fatalf("PUT bodies = %v", puts)
 	}
 }
+
+func TestWooTrashNeverForces(t *testing.T) {
+	var deletes []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deletes = append(deletes, r.URL.RawQuery)
+			w.Write([]byte(`{"id":7,"name":"Dup","sku":"x","status":"trash","images":[]}`))
+			return
+		}
+		w.Write([]byte(`{"id":7,"name":"Dup","sku":"x","status":"publish","images":[]}`))
+	}))
+	defer server.Close()
+	clearConfigEnv(t)
+	setWooEnv(t, server.URL)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "trash", "--id", "7", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 || len(deletes) != 0 {
+		t.Fatalf("dry run: code=%d deletes=%v stderr=%q", code, deletes, stderr.String())
+	}
+	if code := Run([]string{"woo", "trash", "--id", "7", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if len(deletes) != 1 || strings.Contains(deletes[0], "force") {
+		t.Fatalf("DELETE queries = %v", deletes)
+	}
+}
