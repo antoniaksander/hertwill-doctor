@@ -462,3 +462,70 @@ func wooTrashHelp(w io.Writer) {
 	fmt.Fprintln(w, "Never deletes permanently. If the product is still on the Hertwill import list,")
 	fmt.Fprintln(w, "remove it there too, or a later sync may create it again.")
 }
+
+var replaceableFields = map[string]bool{"name": true, "slug": true, "short_description": true, "description": true}
+
+func runWooReplace(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo replace", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.String("id", "", "")
+	field := fs.String("field", "", "")
+	find := fs.String("find", "", "")
+	replace := fs.String("replace", "", "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	if *id == "" || *find == "" {
+		return fmt.Errorf("--id and --find are required")
+	}
+	if !replaceableFields[*field] {
+		return fmt.Errorf("--field must be one of name, slug, short_description, description")
+	}
+	fields, err := client.ProductFields(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	before := fields[*field]
+	count := strings.Count(before, *find)
+	result := map[string]any{"mode": "dry-run", "product_id": *id, "field": *field, "matches": count}
+	if count == 0 {
+		return fmt.Errorf("%q not found in %s of product %s", *find, *field, *id)
+	}
+	after := strings.ReplaceAll(before, *find, *replace)
+	if *confirm {
+		result["mode"] = "confirm"
+		updated, err := client.UpdateProductField(context.Background(), *id, *field, after)
+		if err != nil {
+			return err
+		}
+		after = updated[*field]
+		result["remaining_matches"] = strings.Count(after, *find)
+	}
+	if g.json {
+		result["after"] = after
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "Product %s, %s: %d match(es) of %q -> %q\n", *id, *field, count, *find, *replace)
+	if *field == "name" || *field == "slug" {
+		fmt.Fprintf(stdout, "Before: %s\nAfter:  %s\n", before, after)
+	}
+	if result["mode"] == "dry-run" {
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+	}
+	return nil
+}
+
+func wooReplaceHelp(w io.Writer) {
+	fmt.Fprintln(w, "Find and replace text in one field of a WooCommerce product.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo replace --id <ID> --field <name|slug|short_description|description> --find <TEXT> --replace <TEXT> (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Case-sensitive, replaces every match, and sends only that field. Refuses if the")
+	fmt.Fprintln(w, "text isn't found. Changing a slug changes the product URL; WordPress normally")
+	fmt.Fprintln(w, "redirects the old URL.")
+}
