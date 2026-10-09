@@ -94,6 +94,29 @@ JSON output (`--json`) includes `mode`, `changed`, `woocommerce_before`, `woocom
 
 Debug output (`--debug`) never dumps the full list of image URLs being sent in the `PUT` body — for the image update request it logs `WooCommerce PUT image count: N` instead, to keep debug output readable for large batches. The full URL list is still available in normal dry-run output and JSON.
 
+## WooCommerce product edits
+
+Every edit needs exactly one of `--dry-run` or `--confirm`, sends only the field(s) it changes, and never publishes unless you use `set-status`.
+
+```sh
+hwd woo set-terms --id 31968 --categories 54,765 --brands 780 --dry-run
+hwd woo set-status --id 31968 --status publish --dry-run
+hwd woo set-price --id 9415 --price 32.50 --dry-run
+hwd woo set-price --file prices.txt --confirm
+hwd woo set-name --id 1636 --name "New name" --dry-run
+hwd woo replace --id 1636 --field short_description --find Old --replace New --dry-run
+hwd woo trash --id 9427 --dry-run
+hwd woo create-category --name "Stroller Accessories" --parent 283 --dry-run
+```
+
+- `set-terms` replaces a product's categories and/or brands. A flag that is left out is not changed; `none` clears a list.
+- `set-status` changes only the status: `publish`, `private`, `draft` or `pending`.
+- `set-price` changes only the regular price incl. VAT. For a variable product it sets the same price on every variation (`POST /products/{id}/variations/batch`, 100 per request). The file has one `<woo id> <price>` per line. Sale prices are reported, not changed. Use it to reprice live products; `hwd hertwill sync` refuses products that are already synced. A later Hertwill re-sync may set its own price again.
+- `set-name` changes the title; the URL slug stays.
+- `replace` does a case-sensitive find and replace in one of `name`, `slug`, `short_description` or `description`, and refuses if the text isn't found.
+- `trash` moves a product to the bin; it is never deleted permanently. Remove it from the Hertwill import list too, or a later sync may create it again.
+- `create-category` refuses if a category with the same name already exists.
+
 ## Hertwill
 
 ```sh
@@ -164,3 +187,7 @@ hwd compare --sku ABC123 --hertwill-id 123
 ```
 
 Compares available WooCommerce and Hertwill fields side by side. Unavailable fields are shown as `n/a`.
+
+## Debug output
+
+`--debug` writes sanitized request details to stderr, followed by a request summary: Hertwill and WooCommerce attempts and failures for the command, and the configured limits (Hertwill: 60 requests/minute per IP on public endpoints, 300 per API key on authenticated ones). Failures include non-2xx responses, network errors, timeouts and JSON parse errors. Hertwill `RateLimit` and `RateLimit-Policy` headers are shown when present. Secrets and authorization headers are never printed in full.

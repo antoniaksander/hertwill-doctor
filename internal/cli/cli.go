@@ -1747,7 +1747,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories and/or brands (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
-	fmt.Fprintln(w, "  set-price      Change simple products' regular price (write operation)")
+	fmt.Fprintln(w, "  set-price      Change products' regular price, incl. all variations (write operation)")
 	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")
 	fmt.Fprintln(w, "  replace        Find and replace text in one product field (write operation)")

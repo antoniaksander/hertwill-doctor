@@ -182,6 +182,79 @@ func (c Client) UpdateProductPrice(ctx context.Context, id, regularPrice string)
 	return product.toModel(), nil
 }
 
+// Variation is the price data of one variation of a variable product.
+type Variation struct {
+	ID           int    `json:"id"`
+	SKU          string `json:"sku"`
+	RegularPrice string `json:"regular_price"`
+	SalePrice    string `json:"sale_price"`
+}
+
+// variationPageSize is both the page size for listing variations and the
+// batch size for updating them; WooCommerce caps both at 100.
+const variationPageSize = 100
+
+// ProductVariations lists all variations of a variable product via
+// GET /products/{id}/variations, following pages.
+func (c Client) ProductVariations(ctx context.Context, id string) ([]Variation, error) {
+	var all []Variation
+	for page := 1; ; page++ {
+		query := url.Values{}
+		query.Set("per_page", strconv.Itoa(variationPageSize))
+		query.Set("page", strconv.Itoa(page))
+		var batch []Variation
+		if err := c.get(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id)+"/variations", query, &batch); err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if len(batch) < variationPageSize {
+			return all, nil
+		}
+	}
+}
+
+// UpdateVariationPrices sets only regular_price on the given variations via
+// POST /products/{id}/variations/batch, in chunks of 100.
+func (c Client) UpdateVariationPrices(ctx context.Context, id string, variationIDs []int, regularPrice string) ([]Variation, error) {
+	type update struct {
+		ID           int    `json:"id"`
+		RegularPrice string `json:"regular_price"`
+	}
+	type result struct {
+		Variation
+		Error *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	var updated []Variation
+	for start := 0; start < len(variationIDs); start += variationPageSize {
+		end := min(start+variationPageSize, len(variationIDs))
+		updates := make([]update, 0, end-start)
+		for _, vid := range variationIDs[start:end] {
+			updates = append(updates, update{ID: vid, RegularPrice: regularPrice})
+		}
+		body, err := json.Marshal(map[string][]update{"update": updates})
+		if err != nil {
+			return nil, err
+		}
+		var resp struct {
+			Update []result `json:"update"`
+		}
+		summary := fmt.Sprintf("WooCommerce POST variations batch: %d variations regular_price: %s", len(updates), regularPrice)
+		if err := c.send(ctx, http.MethodPost, "/wp-json/wc/v3/products/"+url.PathEscape(id)+"/variations/batch", body, summary, &resp); err != nil {
+			return updated, err
+		}
+		for _, r := range resp.Update {
+			if r.Error != nil {
+				return updated, fmt.Errorf("variation %d: %s", r.ID, r.Error.Message)
+			}
+			updated = append(updated, r.Variation)
+		}
+	}
+	return updated, nil
+}
+
 // ProductFields returns the raw text fields that ReplaceInField can edit.
 func (c Client) ProductFields(ctx context.Context, id string) (map[string]string, error) {
 	var product wooProduct

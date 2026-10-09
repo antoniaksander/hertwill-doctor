@@ -3,9 +3,11 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -136,23 +138,107 @@ func TestWooSetPriceSendsOnlyRegularPrice(t *testing.T) {
 	}
 }
 
-func TestWooSetPriceRefusesVariableProducts(t *testing.T) {
-	var puts int
+// newVariableWooServer serves variable product 5 with the given number of
+// variations (paged by per_page) and records variation batch bodies.
+func newVariableWooServer(t *testing.T, count int, batches *[]string, writes *int) {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut {
-			puts++
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/wp-json/wc/v3/products/5":
+			w.Write([]byte(`{"id":5,"name":"Boots","type":"variable","status":"publish","regular_price":"","images":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/wp-json/wc/v3/products/5/variations":
+			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+			perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+			var items []string
+			for id := (page-1)*perPage + 1; id <= count && id <= page*perPage; id++ {
+				items = append(items, fmt.Sprintf(`{"id":%d,"regular_price":"140","sale_price":""}`, id))
+			}
+			w.Write([]byte("[" + strings.Join(items, ",") + "]"))
+		case r.Method == http.MethodPost && r.URL.Path == "/wp-json/wc/v3/products/5/variations/batch":
+			*writes++
+			body, _ := io.ReadAll(r.Body)
+			*batches = append(*batches, string(body))
+			var req struct {
+				Update []struct {
+					ID           int    `json:"id"`
+					RegularPrice string `json:"regular_price"`
+				} `json:"update"`
+			}
+			json.Unmarshal(body, &req)
+			var items []string
+			for _, u := range req.Update {
+				items = append(items, fmt.Sprintf(`{"id":%d,"regular_price":%q,"sale_price":""}`, u.ID, u.RegularPrice))
+			}
+			w.Write([]byte(`{"update":[` + strings.Join(items, ",") + `]}`))
+		default:
+			*writes++
+			w.WriteHeader(http.StatusNotFound)
 		}
-		w.Write([]byte(`{"id":5,"name":"Hat","type":"variable","status":"publish","regular_price":"","images":[]}`))
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
 	clearConfigEnv(t)
 	setWooEnv(t, server.URL)
+}
+
+func TestWooSetPriceUpdatesAllVariations(t *testing.T) {
+	var batches []string
+	var writes int
+	newVariableWooServer(t, 3, &batches, &writes)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-price", "--id", "5", "--price", "154.95", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 || writes != 0 {
+		t.Fatalf("dry run: code=%d writes=%d stderr=%q", code, writes, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "would change") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+	stdout.Reset()
+	if code := Run([]string{"woo", "set-price", "--id", "5", "--price", "154.95", "--confirm", "--json"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	want := `{"update":[{"id":1,"regular_price":"154.95"},{"id":2,"regular_price":"154.95"},{"id":3,"regular_price":"154.95"}]}`
+	if len(batches) != 1 || batches[0] != want {
+		t.Fatalf("batch bodies = %v", batches)
+	}
+	var report setPriceReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	e := report.Entries[0]
+	if report.Changed != 1 || e.Variations != 3 || e.Before != "140" || e.After != "154.95" {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+}
+
+func TestWooSetPriceBatchesOver100Variations(t *testing.T) {
+	var batches []string
+	var writes int
+	newVariableWooServer(t, 150, &batches, &writes)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-price", "--id", "5", "--price", "99.95", "--confirm", "--json"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if len(batches) != 2 || strings.Count(batches[0], `"id"`) != 100 || strings.Count(batches[1], `"id"`) != 50 {
+		t.Fatalf("got %d batches", len(batches))
+	}
+	var report setPriceReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Entries[0].Variations != 150 {
+		t.Fatalf("variations = %d", report.Entries[0].Variations)
+	}
+}
+
+func TestWooSetPriceRefusesVariableWithoutVariations(t *testing.T) {
+	var batches []string
+	var writes int
+	newVariableWooServer(t, 0, &batches, &writes)
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"woo", "set-price", "--id", "5", "--price", "20", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 {
-		t.Fatal("expected refusal for a variable product")
+		t.Fatal("expected refusal for a variable product without variations")
 	}
-	if puts != 0 || !strings.Contains(stdout.String(), "variable product") {
-		t.Fatalf("puts=%d stdout=%s", puts, stdout.String())
+	if writes != 0 || !strings.Contains(stdout.String(), "no variations") {
+		t.Fatalf("writes=%d stdout=%s", writes, stdout.String())
 	}
 }
 

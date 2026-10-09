@@ -11,6 +11,8 @@ Configuration precedence:
 
 Environment variables override `.env` values.
 
+`HWD_ENV_FILE` reads a different file instead of `.env`, for example one per store (see [setup.md](setup.md)). `HWD_STORE_NAME` labels the store in `hwd doctor`.
+
 ## Variables
 
 ### WooCommerce
@@ -32,6 +34,8 @@ Hertwill configuration is valid when either:
 or:
 
 - `HERTWILL_EMAIL` and `HERTWILL_PASSWORD` are both present
+
+`HERTWILL_ACCESS_TOKEN` can be a Hertwill API key (`hw_live_...`); `HERTWILL_API_KEY` also works.
 
 For v1, static access token authentication is the clean supported path. Email/password authentication returns a clear error until the login/token endpoint is verified.
 

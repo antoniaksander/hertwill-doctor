@@ -227,10 +227,12 @@ type setPriceEntry struct {
 	Status    string  `json:"status,omitempty"`
 	Before    string  `json:"before,omitempty"`
 	Price     float64 `json:"price"`
-	After     string  `json:"after,omitempty"`
-	Warning   string  `json:"warning,omitempty"`
-	Refused   string  `json:"refused_reason,omitempty"`
-	Error     string  `json:"error,omitempty"`
+	// Variations is the number of variations updated for a variable product.
+	Variations int    `json:"variations,omitempty"`
+	After      string `json:"after,omitempty"`
+	Warning    string `json:"warning,omitempty"`
+	Refused    string `json:"refused_reason,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 type setPriceReport struct {
@@ -280,29 +282,58 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 	for _, t := range targets {
 		wooID := strconv.Itoa(t.ID)
 		entry := setPriceEntry{ProductID: wooID, Price: t.Price}
+		newPrice := strconv.FormatFloat(t.Price, 'f', 2, 64)
 		product, err := client.ProductByID(context.Background(), wooID)
+		var variations []woocommerce.Variation
 		switch {
 		case err != nil:
 			entry.Refused = err.Error()
 		case product.Type == "variable":
-			entry.Refused = "variable product: prices are set on its variations"
+			variations, err = client.ProductVariations(context.Background(), wooID)
+			if err != nil {
+				entry.Refused = "listing variations: " + err.Error()
+			} else if len(variations) == 0 {
+				entry.Refused = "variable product has no variations"
+			}
 		}
-		if err == nil {
+		if product.ID != "" {
 			entry.Name, entry.Status, entry.Before = product.Name, product.Status, product.Regular
 			if product.Sale != "" {
 				entry.Warning = "has sale price " + product.Sale + "; customers still see the sale price"
 			}
 		}
+		if len(variations) > 0 {
+			entry.Variations = len(variations)
+			entry.Before = distinctPrices(variations, func(v woocommerce.Variation) string { return v.RegularPrice })
+			if sale := distinctPrices(variations, func(v woocommerce.Variation) string { return v.SalePrice }); sale != "" {
+				entry.Warning = "variations have sale price " + sale + "; customers still see the sale price"
+			}
+		}
 		if entry.Refused != "" {
 			report.Refused++
 		} else if *confirm {
-			updated, err := client.UpdateProductPrice(context.Background(), wooID, strconv.FormatFloat(t.Price, 'f', 2, 64))
-			if err != nil {
-				entry.Error = err.Error()
-				report.Failed++
+			if len(variations) > 0 {
+				ids := make([]int, 0, len(variations))
+				for _, v := range variations {
+					ids = append(ids, v.ID)
+				}
+				updated, err := client.UpdateVariationPrices(context.Background(), wooID, ids, newPrice)
+				entry.After = distinctPrices(updated, func(v woocommerce.Variation) string { return v.RegularPrice })
+				if err != nil {
+					entry.Error = fmt.Sprintf("%s (%d of %d variations updated)", err, len(updated), len(ids))
+					report.Failed++
+				} else {
+					report.Changed++
+				}
 			} else {
-				entry.After = updated.Regular
-				report.Changed++
+				updated, err := client.UpdateProductPrice(context.Background(), wooID, newPrice)
+				if err != nil {
+					entry.Error = err.Error()
+					report.Failed++
+				} else {
+					entry.After = updated.Regular
+					report.Changed++
+				}
 			}
 		}
 		report.Entries = append(report.Entries, entry)
@@ -317,8 +348,12 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 	} else {
 		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintf(stdout, "Mode: %s (regular price incl. VAT)\n\n", report.Mode)
-		fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tBEFORE\tNEW\tRESULT")
+		fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tVARIATIONS\tBEFORE\tNEW\tRESULT")
 		for _, e := range report.Entries {
+			variations := "-"
+			if e.Variations > 0 {
+				variations = strconv.Itoa(e.Variations)
+			}
 			result := "would change"
 			switch {
 			case e.Refused != "":
@@ -331,7 +366,7 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 			if e.Warning != "" {
 				result += " (" + e.Warning + ")"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%.2f\t%s\n", e.ProductID, e.Name, e.Status, e.Before, e.Price, result)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%.2f\t%s\n", e.ProductID, e.Name, e.Status, variations, e.Before, e.Price, result)
 		}
 		if err := tw.Flush(); err != nil {
 			return err
@@ -348,13 +383,29 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 	return nil
 }
 
+// distinctPrices joins the distinct non-empty prices of variations, in order
+// of first appearance, e.g. "140" or "135/140".
+func distinctPrices(variations []woocommerce.Variation, field func(woocommerce.Variation) string) string {
+	var prices []string
+	seen := map[string]bool{}
+	for _, v := range variations {
+		if p := field(v); p != "" && !seen[p] {
+			seen[p] = true
+			prices = append(prices, p)
+		}
+	}
+	return strings.Join(prices, "/")
+}
+
 func wooSetPriceHelp(w io.Writer) {
-	fmt.Fprintln(w, "Change the regular price of simple WooCommerce products.")
+	fmt.Fprintln(w, "Change the regular price of WooCommerce products.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage: hwd woo set-price (--id <WOO ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm) [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "PRICE is the selling price incl. VAT. The file has one \"<woo id> <price>\" per line.")
-	fmt.Fprintln(w, "Only regular_price is sent. Variable products are refused; a sale price is reported.")
+	fmt.Fprintln(w, "Only regular_price is sent. For a variable product, every variation gets PRICE")
+	fmt.Fprintln(w, "(one batch request per 100 variations). Status, stock and terms are not touched.")
+	fmt.Fprintln(w, "Sale prices are reported, not changed.")
 	fmt.Fprintln(w, "Note: a later Hertwill re-sync of the product may set its own price again.")
 }
 
