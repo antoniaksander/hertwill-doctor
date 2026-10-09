@@ -189,7 +189,7 @@ Raw mode prints only the response body to stdout. Debug output, sanitized reques
 
 `hwd woo set-status --id <ID> --status <publish|private|draft|pending> (--dry-run | --confirm)` changes only the product's status.
 
-`hwd woo set-price (--id <ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm)` changes only the regular price of simple products (variable products are refused). Use it to reprice products that are already live, instead of re-syncing them.
+`hwd woo set-price (--id <ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm)` changes only the regular price. For a variable product it sets the same price on every variation (batch requests of 100); status, stock and categories are not touched. Use it to reprice products that are already live, instead of re-syncing them (`hwd hertwill sync` refuses already-synced products). A later Hertwill re-sync may set its own price again.
 
 ## Import list and sync
 
