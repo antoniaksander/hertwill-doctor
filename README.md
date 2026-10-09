@@ -155,6 +155,7 @@ hwd woo set-price --id 9415 --price 32.50 --dry-run
 hwd woo set-name --id 1636 --name "New name" --dry-run
 hwd woo trash --id 9427 --dry-run
 hwd woo replace --id 1636 --field short_description --find Old --replace New --dry-run
+hwd woo create-category --name "Stroller Accessories" --parent 283 --dry-run
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --confirm
 hwd woo repair-images --sku ABC123 --hertwill-id 123 --max-images 1 --confirm
 ```

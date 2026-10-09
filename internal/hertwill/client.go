@@ -167,6 +167,17 @@ func (c Client) get(ctx context.Context, path string, query url.Values, target a
 }
 
 func (c Client) getBytes(ctx context.Context, path string, query url.Values) ([]byte, map[string]any, error) {
+	var body []byte
+	var metadata map[string]any
+	err := withRateLimitRetry(c.Debug, func() error {
+		var err error
+		body, metadata, err = c.getBytesOnce(ctx, path, query)
+		return err
+	})
+	return body, metadata, err
+}
+
+func (c Client) getBytesOnce(ctx context.Context, path string, query url.Values) ([]byte, map[string]any, error) {
 	token, err := c.token(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -233,7 +244,7 @@ func (c Client) getBytes(ctx context.Context, path string, query url.Values) ([]
 		if c.Stats != nil {
 			c.Stats.HertwillFailure()
 		}
-		return nil, nil, fmt.Errorf("Hertwill request failed with HTTP %d", resp.StatusCode)
+		return nil, nil, &APIError{StatusCode: resp.StatusCode, RetryAfter: retryAfter(resp.Header)}
 	}
 	return body, extractMetadata(body), nil
 }

@@ -215,6 +215,32 @@ func (c Client) UpdateProductField(ctx context.Context, id, field, value string)
 	}, nil
 }
 
+// Category is a WooCommerce product category.
+type Category struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Parent int    `json:"parent"`
+}
+
+// FindCategories returns categories whose name matches search.
+func (c Client) FindCategories(ctx context.Context, search string) ([]Category, error) {
+	var cats []Category
+	err := c.get(ctx, "/wp-json/wc/v3/products/categories", url.Values{"search": {search}, "per_page": {"100"}}, &cats)
+	return cats, err
+}
+
+// CreateCategory creates a product category under parent (0 for top level).
+func (c Client) CreateCategory(ctx context.Context, name string, parent int) (Category, error) {
+	body, err := json.Marshal(map[string]any{"name": name, "parent": parent})
+	if err != nil {
+		return Category{}, err
+	}
+	var cat Category
+	err = c.send(ctx, http.MethodPost, "/wp-json/wc/v3/products/categories", body, "WooCommerce POST category "+name, &cat)
+	return cat, err
+}
+
 // UpdateProductName changes only a product's name via PUT /products/{id}.
 // The slug (URL) is left as it is.
 func (c Client) UpdateProductName(ctx context.Context, id, name string) (model.Product, error) {

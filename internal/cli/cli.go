@@ -332,6 +332,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetTerms(args[1:], stdout, g, client, stats)
+	case "create-category":
+		if hasHelpArg(args[1:]) {
+			wooCreateCategoryHelp(stdout)
+			return nil
+		}
+		return runWooCreateCategory(args[1:], stdout, g, client, stats)
 	case "replace":
 		if hasHelpArg(args[1:]) {
 			wooReplaceHelp(stdout)
@@ -1656,6 +1662,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooTrashHelp(w)
 	case "replace":
 		wooReplaceHelp(w)
+	case "create-category":
+		wooCreateCategoryHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1743,6 +1751,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")
 	fmt.Fprintln(w, "  replace        Find and replace text in one product field (write operation)")
+	fmt.Fprintln(w, "  create-category  Create a product category (write operation)")
 }
 
 func wooProductHelp(w io.Writer) {
