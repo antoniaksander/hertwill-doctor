@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,6 +71,39 @@ type APIError struct {
 	StatusCode int
 	Code       string
 	Message    string
+	RetryAfter time.Duration
+}
+
+// retrySleep is swapped out in tests.
+var retrySleep = time.Sleep
+
+const maxRateLimitRetries = 5
+
+func retryAfter(h http.Header) time.Duration {
+	if s, err := strconv.Atoi(strings.TrimSpace(h.Get("Retry-After"))); err == nil && s > 0 {
+		return time.Duration(s) * time.Second
+	}
+	return 0
+}
+
+// withRateLimitRetry repeats call while Hertwill answers 429, waiting for
+// Retry-After (or 15s) between attempts.
+func withRateLimitRetry(debug func(string), call func() error) error {
+	for attempt := 0; ; attempt++ {
+		err := call()
+		var apiErr *APIError
+		if err == nil || !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusTooManyRequests || attempt >= maxRateLimitRetries {
+			return err
+		}
+		wait := apiErr.RetryAfter
+		if wait <= 0 {
+			wait = 15 * time.Second
+		}
+		if debug != nil {
+			debug(fmt.Sprintf("Hertwill rate limit (429); waiting %s before retry %d", wait, attempt+1))
+		}
+		retrySleep(wait)
+	}
 }
 
 func (e *APIError) Error() string {
@@ -155,6 +189,16 @@ func (c Client) SyncProduct(ctx context.Context, req SyncRequest) (SyncResult, e
 }
 
 func (c Client) postJSON(ctx context.Context, path string, value any) ([]byte, error) {
+	var body []byte
+	err := withRateLimitRetry(c.Debug, func() error {
+		var err error
+		body, err = c.postJSONOnce(ctx, path, value)
+		return err
+	})
+	return body, err
+}
+
+func (c Client) postJSONOnce(ctx context.Context, path string, value any) ([]byte, error) {
 	token, err := c.token(ctx)
 	if err != nil {
 		return nil, err
@@ -211,7 +255,7 @@ func (c Client) postJSON(ctx context.Context, path string, value any) ([]byte, e
 		if c.Stats != nil {
 			c.Stats.HertwillFailure()
 		}
-		apiErr := &APIError{StatusCode: resp.StatusCode}
+		apiErr := &APIError{StatusCode: resp.StatusCode, RetryAfter: retryAfter(resp.Header)}
 		var envelope struct {
 			Error struct {
 				Code    string `json:"code"`

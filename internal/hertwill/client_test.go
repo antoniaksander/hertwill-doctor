@@ -171,3 +171,23 @@ func TestImagesFeaturedDuplicateNotDoubleCounted(t *testing.T) {
 func realProductResponse() string {
 	return `{"data":{"id":3912,"sku":"MOOMIN42B","name":"Moomin Adventure Rain Jacket - Yellow","description":"...","price":59.24,"stock":20,"stock_status":"instock","sale_price":null,"slug":"moomin-adventure-rain-jacket-yellow","brand":{"id":42,"name":"Moomin by NordicBuddies"},"category":{"id":21,"name":"Outerwear"},"categories":[{"id":1,"name":"Apparel"},{"id":21,"name":"Outerwear"}],"images":{"featured":"https://assets.hertwill.com/1.jpg","gallery":["https://assets.hertwill.com/1.jpg","https://assets.hertwill.com/2.jpg","https://assets.hertwill.com/3.jpg","https://assets.hertwill.com/4.jpg","https://assets.hertwill.com/5.jpg","https://assets.hertwill.com/6.jpg","https://assets.hertwill.com/7.jpg","https://assets.hertwill.com/8.jpg","https://assets.hertwill.com/9.jpg","https://assets.hertwill.com/10.jpg","https://assets.hertwill.com/11.jpg","https://assets.hertwill.com/12.jpg","https://assets.hertwill.com/13.jpg","https://assets.hertwill.com/14.jpg","https://assets.hertwill.com/15.jpg","https://assets.hertwill.com/16.jpg","https://assets.hertwill.com/17.jpg","https://assets.hertwill.com/18.jpg"]},"variations":[{"id":8188,"sku":"MOOMIN42B-L","name":"Moomin Adventure Rain Jacket - Yellow - L","price":59.24,"stock":20,"stock_status":"instock","image":null,"attributes":[{"name":"size","value":"L"}]},{"id":8189,"sku":"MOOMIN42B-M","name":"Moomin Adventure Rain Jacket - Yellow - M","price":59.24,"stock":20,"stock_status":"instock","image":null,"attributes":[{"name":"size","value":"M"}]},{"id":8190,"sku":"MOOMIN42B-S","name":"Moomin Adventure Rain Jacket - Yellow - S","price":59.24,"stock":20,"stock_status":"instock","image":null,"attributes":[{"name":"size","value":"S"}]},{"id":8191,"sku":"MOOMIN42B-XL","name":"Moomin Adventure Rain Jacket - Yellow - XL","price":59.24,"stock":20,"stock_status":"instock","image":null,"attributes":[{"name":"size","value":"XL"}]},{"id":8192,"sku":"MOOMIN42B-XS","name":"Moomin Adventure Rain Jacket - Yellow - XS","price":59.24,"stock":20,"stock_status":"instock","image":null,"attributes":[{"name":"size","value":"XS"}]}]},"meta":{"request_id":"req"}}`
 }
+
+func TestRateLimitIsRetried(t *testing.T) {
+	retrySleep = func(time.Duration) {}
+	defer func() { retrySleep = time.Sleep }()
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Write([]byte(`{"data":{"id":1,"name":"Hat","sku":"h"}}`))
+	}))
+	defer server.Close()
+	product, err := (Client{BaseURL: server.URL, AccessToken: "token", Timeout: time.Second}).Product(context.Background(), "1")
+	if err != nil || product.Name != "Hat" || calls != 3 {
+		t.Fatalf("product=%+v err=%v calls=%d", product, err, calls)
+	}
+}

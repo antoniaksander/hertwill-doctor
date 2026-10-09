@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"strconv"
 	"strings"
@@ -528,4 +529,58 @@ func wooReplaceHelp(w io.Writer) {
 	fmt.Fprintln(w, "Case-sensitive, replaces every match, and sends only that field. Refuses if the")
 	fmt.Fprintln(w, "text isn't found. Changing a slug changes the product URL; WordPress normally")
 	fmt.Fprintln(w, "redirects the old URL.")
+}
+
+func runWooCreateCategory(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo create-category", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	name := fs.String("name", "", "")
+	parent := fs.Int("parent", 0, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	n := strings.TrimSpace(*name)
+	if n == "" {
+		return fmt.Errorf("--name is required")
+	}
+	existing, err := client.FindCategories(context.Background(), n)
+	if err != nil {
+		return err
+	}
+	for _, c := range existing {
+		if strings.EqualFold(html.UnescapeString(c.Name), n) {
+			return fmt.Errorf("category %q already exists (ID %d, parent %d)", n, c.ID, c.Parent)
+		}
+	}
+	result := map[string]any{"mode": "dry-run", "name": n, "parent": *parent}
+	if *confirm {
+		result["mode"] = "confirm"
+		cat, err := client.CreateCategory(context.Background(), n, *parent)
+		if err != nil {
+			return err
+		}
+		result["id"], result["slug"] = cat.ID, cat.Slug
+	}
+	if g.json {
+		return writeJSON(stdout, result)
+	}
+	if *dryRun {
+		fmt.Fprintf(stdout, "Would create category %q under parent %d.\n\nDry run only. No WooCommerce changes were made.\n", n, *parent)
+		return nil
+	}
+	fmt.Fprintf(stdout, "Created category %q: ID %v, slug %v, parent %d\n", n, result["id"], result["slug"], *parent)
+	return nil
+}
+
+func wooCreateCategoryHelp(w io.Writer) {
+	fmt.Fprintln(w, "Create a WooCommerce product category.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo create-category --name <NAME> [--parent <ID>] (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Refuses if a category with the same name already exists.")
 }
