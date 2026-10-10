@@ -301,12 +301,44 @@ func (c Client) UpdateProductField(ctx context.Context, id, field, value string)
 	}, nil
 }
 
-// Category is a WooCommerce product category.
+// Category is a WooCommerce product category or brand term.
 type Category struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	Slug   string `json:"slug"`
 	Parent int    `json:"parent"`
+	Count  int    `json:"count"`
+}
+
+// termPageSize is the page size for listing categories and brands; the
+// WooCommerce maximum is 100.
+const termPageSize = 100
+
+// ListCategories returns every product category, following pages.
+func (c Client) ListCategories(ctx context.Context) ([]Category, error) {
+	return c.listTerms(ctx, "/wp-json/wc/v3/products/categories")
+}
+
+// ListBrands returns every product brand (WooCommerce Brands), following pages.
+func (c Client) ListBrands(ctx context.Context) ([]Category, error) {
+	return c.listTerms(ctx, "/wp-json/wc/v3/products/brands")
+}
+
+func (c Client) listTerms(ctx context.Context, path string) ([]Category, error) {
+	var all []Category
+	for page := 1; ; page++ {
+		query := url.Values{}
+		query.Set("per_page", strconv.Itoa(termPageSize))
+		query.Set("page", strconv.Itoa(page))
+		var batch []Category
+		if err := c.get(ctx, path, query, &batch); err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if len(batch) < termPageSize {
+			return all, nil
+		}
+	}
 }
 
 // FindCategories returns categories whose name matches search.

@@ -94,6 +94,16 @@ JSON output (`--json`) includes `mode`, `changed`, `woocommerce_before`, `woocom
 
 Debug output (`--debug`) never dumps the full list of image URLs being sent in the `PUT` body — for the image update request it logs `WooCommerce PUT image count: N` instead, to keep debug output readable for large batches. The full URL list is still available in normal dry-run output and JSON.
 
+## WooCommerce categories and brands
+
+```sh
+hwd woo categories
+hwd woo categories --contains beauty
+hwd woo brands --contains fox --json
+```
+
+Read-only. `categories` reads every page of `GET /wp-json/wc/v3/products/categories` and prints the tree with ID, name and product count, children indented under their parent. `brands` does the same for `GET /wp-json/wc/v3/products/brands`. `--contains` keeps matching terms plus their parents, so each match shows its full path. `--json` adds each term's `path` (e.g. `Women > Women Beauty products > Women Creams & Scrubs`). Use the IDs with `woo set-terms`. Product counts are WooCommerce's own and only include published products.
+
 ## WooCommerce product edits
 
 Every edit needs exactly one of `--dry-run` or `--confirm`, sends only the field(s) it changes, and never publishes unless you use `set-status`.

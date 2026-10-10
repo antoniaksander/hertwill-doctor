@@ -345,6 +345,18 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooCreateCategory(args[1:], stdout, g, client, stats)
+	case "categories":
+		if hasHelpArg(args[1:]) {
+			wooCategoriesHelp(stdout)
+			return nil
+		}
+		return runWooTerms("categories", args[1:], stdout, g, client)
+	case "brands":
+		if hasHelpArg(args[1:]) {
+			wooBrandsHelp(stdout)
+			return nil
+		}
+		return runWooTerms("brands", args[1:], stdout, g, client)
 	case "replace":
 		if hasHelpArg(args[1:]) {
 			wooReplaceHelp(stdout)
@@ -1678,6 +1690,10 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooReplaceHelp(w)
 	case "create-category":
 		wooCreateCategoryHelp(w)
+	case "categories":
+		wooCategoriesHelp(w)
+	case "brands":
+		wooBrandsHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1768,6 +1784,8 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")
 	fmt.Fprintln(w, "  replace        Find and replace text in one product field (write operation)")
 	fmt.Fprintln(w, "  create-category  Create a product category (write operation)")
+	fmt.Fprintln(w, "  categories     List product categories as a tree with IDs")
+	fmt.Fprintln(w, "  brands         List product brands with IDs")
 }
 
 func wooProductHelp(w io.Writer) {
