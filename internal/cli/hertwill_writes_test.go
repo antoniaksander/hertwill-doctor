@@ -36,6 +36,15 @@ const importListPage2 = `{"data":[
   "variations":[{"id":18903,"dropship_id":3252548}]}
 ],"meta":{"pagination":{"page":2,"per_page":20,"total":3,"page_count":2}}}`
 
+// importListSyncFailed is what ?status=sync-failed returns: 811 is not in the
+// default list; 9107 is in both.
+const importListSyncFailed = `{"data":[
+ {"id":811,"product_id":3100001,"name":"Blue Widgets","sku":"5113661-sinine","status":"sync-failed","price":48.45,"currency":"EUR",
+  "variations":[{"id":3001,"dropship_id":3100002}]},
+ {"id":9107,"product_id":3253248,"name":"BREDEN - Roadbuild Day","sku":"breden-roadbuild","status":"sync-failed","price":19.82,"currency":"EUR",
+  "variations":[{"id":20610,"dropship_id":3253249}]}
+],"meta":{"pagination":{"page":1,"per_page":20,"total":2,"page_count":1}}}`
+
 func newFakeHertwill(t *testing.T) *fakeHertwill {
 	t.Helper()
 	f := &fakeHertwill{posts: map[string][]string{}, syncStatus: map[int]int{}}
@@ -46,11 +55,23 @@ func newFakeHertwill(t *testing.T) *fakeHertwill {
 		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == hertwill.ImportListPath:
+			if r.URL.Query().Get("status") == "sync-failed" {
+				w.Write([]byte(importListSyncFailed))
+				return
+			}
 			if r.URL.Query().Get("page") == "2" {
 				w.Write([]byte(importListPage2))
 				return
 			}
 			w.Write([]byte(importListPage1))
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/products/"):
+			id := strings.TrimPrefix(r.URL.Path, "/v1/products/")
+			w.Write([]byte(`{"id":` + id + `,"name":"Product ` + id + `","sku":"sku-` + id + `","price":{"amount":10,"currency":"EUR"}}`))
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/import-list/products/"):
+			f.mu.Lock()
+			f.posts["DELETE "+r.URL.Path] = append(f.posts["DELETE "+r.URL.Path], "")
+			f.mu.Unlock()
+			w.Write([]byte(`{"data":{"removed":true}}`))
 		case r.Method == http.MethodPost:
 			body, _ := io.ReadAll(r.Body)
 			f.mu.Lock()
@@ -211,6 +232,103 @@ func TestSyncFileRefusesAndKeepsGoingAfterFailure(t *testing.T) {
 	}
 	if f.postCount(hertwill.SyncProductsPath) != 2 {
 		t.Fatalf("expected 2 sync POSTs (refused ones skipped), got %d", f.postCount(hertwill.SyncProductsPath))
+	}
+}
+
+func TestSyncRefusesSyncFailedWithoutRetryFlag(t *testing.T) {
+	f := newFakeHertwill(t)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"hertwill", "sync", "--id", "811", "--price", "79.95", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected refusal without --retry-failed")
+	}
+	if f.postCount(hertwill.SyncProductsPath) != 0 || !strings.Contains(stdout.String(), "not in the unsynced import list") {
+		t.Fatalf("posts=%d stdout=%s", f.postCount(hertwill.SyncProductsPath), stdout.String())
+	}
+}
+
+func TestSyncRetryFailedSendsSyncFailedProduct(t *testing.T) {
+	f := newFakeHertwill(t)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hertwill", "sync", "--id", "811", "--price", "79.95", "--retry-failed", "--confirm"}, &stdout, &stderr, BuildInfo{})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%q stdout=%s", code, stderr.String(), stdout.String())
+	}
+	var req hertwill.SyncRequest
+	if err := json.Unmarshal([]byte(f.posts[hertwill.SyncProductsPath][0]), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.ProductID != 811 || len(req.Variations) != 1 || req.Variations[0].DropshipID != 3100002 || req.Variations[0].DefaultStoreMarkup != 79.95 {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+}
+
+func TestSyncRetryFailedKeepsDefaultListEntry(t *testing.T) {
+	f := newFakeHertwill(t)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"hertwill", "sync", "--id", "9107", "--price", "40.95", "--retry-failed", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	var req hertwill.SyncRequest
+	json.Unmarshal([]byte(f.posts[hertwill.SyncProductsPath][0]), &req)
+	if len(req.Variations) != 2 {
+		t.Fatalf("expected the default-list entry with 2 variations, got %+v", req)
+	}
+}
+
+// newFakeWooSKUs serves WooCommerce SKU lookups; skus maps SKU to product ID.
+func newFakeWooSKUs(t *testing.T, skus map[string]int) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := skus[r.URL.Query().Get("sku")]; ok {
+			w.Write([]byte(`[{"id":` + itoa(id) + `,"name":"Live","sku":"` + r.URL.Query().Get("sku") + `","status":"publish","images":[]}]`))
+			return
+		}
+		w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(server.Close)
+	setWooEnv(t, server.URL)
+}
+
+func TestRemoveDryRunSendsNothing(t *testing.T) {
+	f := newFakeHertwill(t)
+	newFakeWooSKUs(t, nil)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"hertwill", "remove", "--ids", "811", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if f.postCount("DELETE /v1/import-list/products/811") != 0 || !strings.Contains(stdout.String(), "would remove") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestRemoveConfirmDeletesEachID(t *testing.T) {
+	f := newFakeHertwill(t)
+	newFakeWooSKUs(t, nil)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"hertwill", "remove", "--ids", "811,913", "--confirm"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if f.postCount("DELETE /v1/import-list/products/811") != 1 || f.postCount("DELETE /v1/import-list/products/913") != 1 {
+		t.Fatalf("deletes = %v", f.posts)
+	}
+}
+
+func TestRemoveRefusesProductLiveInWooUnlessForced(t *testing.T) {
+	f := newFakeHertwill(t)
+	newFakeWooSKUs(t, map[string]int{"sku-811": 6192})
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"hertwill", "remove", "--ids", "811", "--confirm"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected refusal for a product that is in WooCommerce")
+	}
+	if f.postCount("DELETE /v1/import-list/products/811") != 0 || !strings.Contains(stdout.String(), "in WooCommerce as 6192") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+	stdout.Reset()
+	if code := Run([]string{"hertwill", "remove", "--ids", "811", "--confirm", "--force"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("forced: code = %d stderr=%q", code, stderr.String())
+	}
+	if f.postCount("DELETE /v1/import-list/products/811") != 1 {
+		t.Fatal("expected a DELETE with --force")
 	}
 }
 

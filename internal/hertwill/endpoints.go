@@ -12,6 +12,7 @@ const (
 	APIKeysPath            = "/v1/api-keys"
 	ImportListPath         = "/v1/import-list"
 	ImportListProductsPath = "/v1/import-list/products"
+	ImportListProductPath  = "/v1/import-list/products/{productId}"
 	SyncProductsPath       = "/v1/sync/products"
 	SyncJobPath            = "/v1/sync/jobs/{productId}"
 )

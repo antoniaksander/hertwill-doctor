@@ -44,7 +44,7 @@ hwd woo product --id 123
 hwd woo search --query "boots" --limit 10
 ```
 
-For `hwd woo product`, provide either `--sku` or `--id`. If both are provided, the command returns an error. SKU remains the primary sync diagnostic path.
+For `hwd woo product`, provide either `--sku` or `--id`. If both are provided, the command returns an error. SKU remains the primary sync diagnostic path. `--sku <SKU> --trash` looks in the WooCommerce trash instead (the default lookup skips trashed products, but their SKUs still block a new product with the same SKU).
 
 Search defaults to `--limit 10` and enforces a maximum of `100`. Output may be truncated by the default limit.
 
@@ -151,6 +151,8 @@ hwd hertwill import --ids 8096,8097 --dry-run
 hwd hertwill import --ids 8096,8097 --confirm
 hwd hertwill sync --id 9107 --price 40.95 --dry-run
 hwd hertwill sync --file prices.txt --confirm --json
+hwd hertwill sync --id 811 --price 79.95 --retry-failed --dry-run
+hwd hertwill remove --ids 811 --dry-run
 ```
 
 `import-list` fetches every page of `GET /v1/import-list` (20 per page). Without `--status`, Hertwill returns only products that are not synced yet. Columns: catalog ID, name, import status, wholesale cost, variant count, SKU. `--json` adds `product_id` (store dropship ID) and each variation's `id` and `dropship_id`.
@@ -165,6 +167,20 @@ hwd hertwill sync --file prices.txt --confirm --json
 ```
 
 Refused locally (no request sent): product not in the unsynced import list, or price below its wholesale cost. With `--confirm`, requests are sent one at a time with `--delay-ms` (default 1000) between them; a failed product is reported with Hertwill's error code and message, and the command continues. Exit code is non-zero if any product failed or was refused. JSON output includes `entries` (id, name, cost, price, variations, result, error, refused_reason) and `started`/`failed`/`refused` counts.
+
+`--retry-failed` also accepts products with import status `sync-failed`, which drop out of the default list. If such a product is live in WooCommerce, the re-sync sets it to private first.
+
+`remove` deletes products from the import list (`DELETE /v1/import-list/products/{id}`, one request per ID, at most 50). It refuses any product whose SKU is in WooCommerce, because removing may unlink a live product; `--force` overrides.
+
+### Broken WooCommerce link
+
+Sometimes Hertwill keeps a link to a WooCommerce product that no longer exists. Every sync then either fails or reports `synced` without creating anything, and the product never appears in the shop. To fix it, remove the product from the import list, add it again, and sync it:
+
+```sh
+hwd hertwill remove --ids 811 --confirm
+hwd hertwill import --ids 811 --confirm
+hwd hertwill sync --id 811 --price 79.95 --confirm
+```
 
 ## Diagnose
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/antoniaksander/hertwill-doctor/internal/hertwill"
 	"github.com/antoniaksander/hertwill-doctor/internal/httpstats"
+	"github.com/antoniaksander/hertwill-doctor/internal/model"
 )
 
 // sleep is swapped out in tests so batch syncs don't wait between requests.
@@ -180,6 +181,139 @@ func runHertwillImport(args []string, stdout io.Writer, g globals, client hertwi
 	return nil
 }
 
+type removeEntry struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name,omitempty"`
+	SKU     string `json:"sku,omitempty"`
+	WooID   string `json:"woo_id,omitempty"`
+	Result  string `json:"result,omitempty"`
+	Refused string `json:"refused_reason,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+type removeReport struct {
+	Mode           string           `json:"mode"`
+	Entries        []removeEntry    `json:"entries"`
+	Removed        int              `json:"removed"`
+	Failed         int              `json:"failed"`
+	Refused        int              `json:"refused"`
+	RequestSummary *httpstats.Stats `json:"request_summary,omitempty"`
+}
+
+// skuLookup is the WooCommerce lookup remove uses to protect live products.
+type skuLookup interface {
+	ProductBySKU(ctx context.Context, sku string) (model.Product, error)
+}
+
+func runHertwillRemove(args []string, stdout io.Writer, g globals, client hertwill.Client, woo skuLookup, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("hertwill remove", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	idsFlag := fs.String("ids", "", "")
+	force := fs.Bool("force", false, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	ids, err := parseIDList(*idsFlag)
+	if err != nil {
+		return err
+	}
+	if len(ids) > 50 {
+		return fmt.Errorf("at most 50 product IDs per remove")
+	}
+
+	report := removeReport{Mode: "dry-run"}
+	if *confirm {
+		report.Mode = "confirm"
+	}
+	for _, id := range ids {
+		entry := removeEntry{ID: id}
+		product, err := client.Product(context.Background(), strconv.Itoa(id))
+		switch {
+		case err != nil:
+			entry.Refused = "Hertwill product lookup failed: " + err.Error()
+		case product.SKU == "":
+			entry.Refused = "Hertwill product has no SKU, so WooCommerce can't be checked"
+		default:
+			entry.Name, entry.SKU = product.Name, product.SKU
+			wooProduct, err := woo.ProductBySKU(context.Background(), product.SKU)
+			switch {
+			case err != nil:
+				entry.Refused = "WooCommerce lookup failed: " + err.Error()
+			case wooProduct.Found && !*force:
+				entry.WooID = wooProduct.ID
+				entry.Refused = fmt.Sprintf("in WooCommerce as %s (%s); use --force to remove anyway", wooProduct.ID, wooProduct.Status)
+			case wooProduct.Found:
+				entry.WooID = wooProduct.ID
+			}
+		}
+		if entry.Refused != "" {
+			report.Refused++
+		} else if *confirm {
+			if err := client.RemoveFromImportList(context.Background(), id); err != nil {
+				entry.Error = err.Error()
+				report.Failed++
+			} else {
+				entry.Result = "removed"
+				report.Removed++
+			}
+		}
+		report.Entries = append(report.Entries, entry)
+	}
+
+	if g.json {
+		snapshot := stats.Snapshot()
+		report.RequestSummary = &snapshot
+		if err := writeJSON(stdout, report); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(stdout, "Mode: %s\n\n", report.Mode)
+		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "ID\tNAME\tSKU\tRESULT")
+		for _, e := range report.Entries {
+			result := "would remove"
+			switch {
+			case e.Refused != "":
+				result = "refused: " + e.Refused
+			case e.Error != "":
+				result = "failed: " + e.Error
+			case e.Result != "":
+				result = e.Result
+			}
+			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\n", e.ID, e.Name, e.SKU, result)
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+		if report.Mode == "dry-run" {
+			fmt.Fprintln(stdout, "\nDry run only. No Hertwill changes were made.")
+		} else {
+			fmt.Fprintf(stdout, "\nRemoved: %d, failed: %d, refused: %d\n", report.Removed, report.Failed, report.Refused)
+		}
+	}
+	if report.Failed > 0 || report.Refused > 0 {
+		return fmt.Errorf("%d failed, %d refused", report.Failed, report.Refused)
+	}
+	return nil
+}
+
+func hertwillRemoveHelp(w io.Writer) {
+	fmt.Fprintln(w, "Remove products from the store's Hertwill import list.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd hertwill remove --ids <ID,ID,...> (--dry-run | --confirm) [--force] [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Use it to reset a product whose Hertwill link to WooCommerce is broken (sync")
+	fmt.Fprintln(w, "reports synced or sync-failed, but the product isn't in the shop): remove it,")
+	fmt.Fprintln(w, "then add it again with hwd hertwill import and sync it.")
+	fmt.Fprintln(w, "Refuses products whose SKU is in WooCommerce, because removing may unlink a")
+	fmt.Fprintln(w, "live product from Hertwill; --force overrides. One request per ID, at most 50.")
+}
+
 func runHertwillSync(args []string, stdout io.Writer, g globals, client hertwill.Client, stats *httpstats.Stats) error {
 	fs := flag.NewFlagSet("hertwill sync", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -188,6 +322,7 @@ func runHertwillSync(args []string, stdout io.Writer, g globals, client hertwill
 	file := fs.String("file", "", "")
 	currency := fs.String("currency", "EUR", "")
 	delayMS := fs.Int("delay-ms", 1000, "")
+	retryFailed := fs.Bool("retry-failed", false, "")
 	dryRun := fs.Bool("dry-run", false, "")
 	confirm := fs.Bool("confirm", false, "")
 	if err := fs.Parse(args); err != nil {
@@ -222,17 +357,34 @@ func runHertwillSync(args []string, stdout io.Writer, g globals, client hertwill
 	for _, item := range items {
 		byID[item.ID] = item
 	}
+	// Products whose sync failed can drop out of the default (unsynced) list,
+	// so a retry looks them up in the sync-failed list too.
+	if *retryFailed {
+		failed, err := client.ImportList(context.Background(), "sync-failed")
+		if err != nil {
+			return err
+		}
+		for _, item := range failed {
+			if _, seen := byID[item.ID]; !seen && item.Status == "sync-failed" {
+				byID[item.ID] = item
+			}
+		}
+	}
 
 	report := syncReport{Mode: "dry-run", Currency: *currency}
 	if *confirm {
 		report.Mode = "confirm"
+	}
+	notListed := "not in the unsynced import list (already synced, or run hwd hertwill import first)"
+	if *retryFailed {
+		notListed = "not in the unsynced or sync-failed import list"
 	}
 	for _, target := range targets {
 		entry := syncPlanEntry{ID: target.ID, Price: target.Price}
 		item, ok := byID[target.ID]
 		switch {
 		case !ok:
-			entry.Refused = "not in the unsynced import list (already synced, or run hwd hertwill import first)"
+			entry.Refused = notListed
 		case target.Price < item.Price:
 			entry.Refused = fmt.Sprintf("price %.2f is below cost %.2f", target.Price, item.Price)
 		}
@@ -414,13 +566,16 @@ func hertwillSyncHelp(w io.Writer) {
 	fmt.Fprintln(w, "Sync import-list products to the connected store at a fixed selling price.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage: hwd hertwill sync (--id <ID> --price <PRICE> | --file <PATH>) (--dry-run | --confirm)")
-	fmt.Fprintln(w, "                         [--currency EUR] [--delay-ms 1000] [--json]")
+	fmt.Fprintln(w, "                         [--retry-failed] [--currency EUR] [--delay-ms 1000] [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "PRICE is the absolute selling price (e.g. 40.95), not a markup multiplier.")
 	fmt.Fprintln(w, "Every variation gets the same price. The file has one \"<id> <price>\" per line;")
 	fmt.Fprintln(w, "# comments and blank lines are ignored.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Products not in the import list or priced below cost are refused locally.")
+	fmt.Fprintln(w, "--retry-failed also accepts products with import status sync-failed, which")
+	fmt.Fprintln(w, "drop out of the default list. If such a product is live in WooCommerce, the")
+	fmt.Fprintln(w, "re-sync sets it to private first; check with hwd woo product before retrying.")
 	fmt.Fprintln(w, "--confirm keeps going after a failed product and exits non-zero if any failed.")
 	fmt.Fprintln(w, "Synced products land in WooCommerce as private; this command never publishes.")
 }

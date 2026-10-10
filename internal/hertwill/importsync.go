@@ -189,21 +189,26 @@ func (c Client) SyncProduct(ctx context.Context, req SyncRequest) (SyncResult, e
 }
 
 func (c Client) postJSON(ctx context.Context, path string, value any) ([]byte, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return c.send(ctx, http.MethodPost, path, payload)
+}
+
+// send makes one write request with rate-limit retries. payload may be nil.
+func (c Client) send(ctx context.Context, method, path string, payload []byte) ([]byte, error) {
 	var body []byte
 	err := withRateLimitRetry(c.Debug, func() error {
 		var err error
-		body, err = c.postJSONOnce(ctx, path, value)
+		body, err = c.sendOnce(ctx, method, path, payload)
 		return err
 	})
 	return body, err
 }
 
-func (c Client) postJSONOnce(ctx context.Context, path string, value any) ([]byte, error) {
+func (c Client) sendOnce(ctx context.Context, method, path string, payload []byte) ([]byte, error) {
 	token, err := c.token(ctx)
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
 	}
@@ -215,14 +220,20 @@ func (c Client) postJSONOnce(ctx context.Context, path string, value any) ([]byt
 	defer cancel()
 
 	endpoint := strings.TrimRight(c.baseURL(), "/") + path
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	var reader io.Reader
+	if payload != nil {
+		reader = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, endpoint, reader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if c.Debug != nil {
-		c.Debug("Hertwill POST " + endpoint + " Authorization=Bearer **** Body bytes: " + strconv.Itoa(len(payload)))
+		c.Debug("Hertwill " + method + " " + endpoint + " Authorization=Bearer **** Body bytes: " + strconv.Itoa(len(payload)))
 	}
 	if c.Stats != nil {
 		c.Stats.HertwillAttempt()
@@ -269,6 +280,13 @@ func (c Client) postJSONOnce(ctx context.Context, path string, value any) ([]byt
 		return nil, apiErr
 	}
 	return body, nil
+}
+
+// RemoveFromImportList removes one catalog product from the store's import
+// list via DELETE /v1/import-list/products/{productId}.
+func (c Client) RemoveFromImportList(ctx context.Context, productID int) error {
+	_, err := c.send(ctx, http.MethodDelete, strings.ReplaceAll(ImportListProductPath, "{productId}", strconv.Itoa(productID)), nil)
+	return err
 }
 
 // RawSyncJob returns the raw GET /v1/sync/jobs/{productId} response for one

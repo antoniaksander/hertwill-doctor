@@ -281,6 +281,7 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 		fs.SetOutput(io.Discard)
 		sku := fs.String("sku", "", "")
 		id := fs.String("id", "", "")
+		trash := fs.Bool("trash", false, "")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -290,11 +291,17 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 		if *sku != "" && *id != "" {
 			return fmt.Errorf("provide only one of --sku or --id")
 		}
+		if *trash && *sku == "" {
+			return fmt.Errorf("--trash works with --sku")
+		}
 		var product model.Product
 		var err error
-		if *id != "" {
+		switch {
+		case *id != "":
 			product, err = client.ProductByID(context.Background(), *id)
-		} else {
+		case *trash:
+			product, err = client.TrashedProductBySKU(context.Background(), *sku)
+		default:
 			product, err = client.ProductBySKU(context.Background(), *sku)
 		}
 		if err != nil {
@@ -832,6 +839,13 @@ func runHertwill(args []string, stdout, _ io.Writer, g globals, cfg config.Confi
 			return nil
 		}
 		return runHertwillImport(args[1:], stdout, g, client, stats)
+	case "remove":
+		if hasHelpArg(args[1:]) {
+			hertwillRemoveHelp(stdout)
+			return nil
+		}
+		woo := woocommerce.Client{BaseURL: cfg.WooBaseURL, ConsumerKey: cfg.WooConsumerKey, ConsumerSecret: cfg.WooConsumerSecret, Timeout: cfg.Timeout(), Stats: stats, Debug: debug}
+		return runHertwillRemove(args[1:], stdout, g, client, woo, stats)
 	case "sync":
 		if hasHelpArg(args[1:]) {
 			hertwillSyncHelp(stdout)
@@ -1687,6 +1701,8 @@ func hertwillHelpFor(args []string, w io.Writer) {
 		hertwillImportListHelp(w)
 	case "import":
 		hertwillImportHelp(w)
+	case "remove":
+		hertwillRemoveHelp(w)
 	case "sync":
 		hertwillSyncHelp(w)
 	case "sync-job":
@@ -1757,7 +1773,10 @@ func wooHelp(w io.Writer) {
 func wooProductHelp(w io.Writer) {
 	fmt.Fprintln(w, "Look up a WooCommerce product by SKU or ID.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage: hwd woo product (--sku <SKU> | --id <ID>) [--json]")
+	fmt.Fprintln(w, "Usage: hwd woo product (--sku <SKU> [--trash] | --id <ID>) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "--trash looks for the SKU in the WooCommerce trash. A trashed product still")
+	fmt.Fprintln(w, "holds its SKU, so a Hertwill sync of a product with that SKU fails.")
 }
 
 func wooSearchHelp(w io.Writer) {
@@ -1814,6 +1833,7 @@ func hertwillHelp(w io.Writer) {
 	fmt.Fprintln(w, "  search       Search Hertwill products")
 	fmt.Fprintln(w, "  import-list  List the store's import list with variant counts")
 	fmt.Fprintln(w, "  import       Add products to the import list (--dry-run | --confirm)")
+	fmt.Fprintln(w, "  remove       Remove products from the import list (--dry-run | --confirm)")
 	fmt.Fprintln(w, "  sync         Sync import-list products at a selling price (--dry-run | --confirm)")
 	fmt.Fprintln(w, "  sync-job     Show a product's sync job and recorded errors (read-only)")
 	fmt.Fprintln(w, "  sync-status  Show Hertwill sync status for a product")
