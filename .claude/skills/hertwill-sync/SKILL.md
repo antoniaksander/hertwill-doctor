@@ -27,6 +27,7 @@ description: Import and sync Hertwill dropshipping products to the connected Woo
 - **Re-syncing a product that is already in WooCommerce sets it to private first.** If the sync then fails (seen for MIKA, HAPPY, KLAUS: "sync-failed", no error detail), the live product stays hidden. Before re-syncing a live product, note its status and categories, and check them afterwards; restore with `hwd woo set-status` / `set-terms`. `hwd hertwill sync-job --id <id>` shows Hertwill's job status.
 - To change the price of a product that is already in WooCommerce, use `hwd woo set-price` (simple and variable products; every variation gets the price; `--file` takes `<woo id> <price>` lines), not a re-sync. `hwd hertwill sync` refuses products that are already synced.
 - 403 "You are not allowed to sync this product" means Hertwill blocks that product for the store. It has to be fixed in the Hertwill dashboard; don't retry.
+- **Broken link:** if Hertwill reports a product as `synced` or `sync-failed` but its SKU isn't in WooCommerce (`hwd woo product --sku`, also with `--trash`), Hertwill is still linked to a deleted product. Fix: `hwd hertwill remove --ids <id>`, `hwd hertwill import --ids <id>`, then sync. Each step needs `--dry-run` first and the user's OK for `--confirm`. `remove` refuses products that are in WooCommerce.
 
 ## Workflow
 

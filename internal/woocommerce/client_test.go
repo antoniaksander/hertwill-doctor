@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +37,25 @@ func TestProductBySKUSuccess(t *testing.T) {
 	}
 	if stats.Snapshot().WooAttempts != 1 || stats.Snapshot().WooFailures != 0 {
 		t.Fatalf("unexpected stats: %+v", stats.Snapshot())
+	}
+}
+
+func TestTrashedProductBySKUQueriesTrash(t *testing.T) {
+	var gotQuery url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Write([]byte(`[{"id":7,"name":"Blue Widgets","sku":"5113661-sinine","status":"trash","images":[]}]`))
+	}))
+	defer server.Close()
+	product, err := (Client{BaseURL: server.URL, ConsumerKey: "ck", ConsumerSecret: "cs", Timeout: time.Second}).TrashedProductBySKU(context.Background(), "5113661-sinine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotQuery.Get("status") != "trash" || gotQuery.Get("sku") != "5113661-sinine" {
+		t.Fatalf("query = %v", gotQuery)
+	}
+	if !product.Found || product.Status != "trash" {
+		t.Fatalf("product = %+v", product)
 	}
 }
 

@@ -112,6 +112,17 @@ This file tracks endpoint assumptions for Hertwill Doctor v1. Unverified endpoin
 - verification status: verified against the live API (2026-10)
 - notes: used by `hwd hertwill import`.
 
+## Remove From Import List
+
+- name: remove a product from the import list
+- HTTP method: `DELETE`
+- path: `/v1/import-list/products/{productId}`
+- auth required: yes
+- request schema, if known: path parameter `productId` (catalog product ID), no body
+- response schema, if known: 2xx on success; body not relied on
+- verification status: verified against the live API (2026-10), path taken from the @hertwill/mcp 1.2.0 client
+- notes: used by `hwd hertwill remove`. Removing and adding a product again resets a broken link to a deleted WooCommerce product; afterwards the sync creates the product again.
+
 ## Sync Products
 
 - name: sync products

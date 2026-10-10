@@ -73,8 +73,21 @@ func (c Client) HealthCheck(ctx context.Context) error {
 }
 
 func (c Client) ProductBySKU(ctx context.Context, sku string) (model.Product, error) {
+	return c.productBySKU(ctx, sku, url.Values{})
+}
+
+// TrashedProductBySKU looks up a product in the WooCommerce trash. The default
+// lookup (status "any") skips trashed products, but their SKUs still block a
+// new product with the same SKU.
+func (c Client) TrashedProductBySKU(ctx context.Context, sku string) (model.Product, error) {
+	return c.productBySKU(ctx, sku, url.Values{"status": {"trash"}})
+}
+
+func (c Client) productBySKU(ctx context.Context, sku string, query url.Values) (model.Product, error) {
+	query.Set("sku", sku)
+	query.Set("per_page", "1")
 	var products []wooProduct
-	err := c.get(ctx, "/wp-json/wc/v3/products", url.Values{"sku": {sku}, "per_page": {"1"}}, &products)
+	err := c.get(ctx, "/wp-json/wc/v3/products", query, &products)
 	if err != nil {
 		return model.Product{}, err
 	}
