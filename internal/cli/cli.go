@@ -354,6 +354,18 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooCreateCategory(args[1:], stdout, g, client, stats)
+	case "update-category":
+		if hasHelpArg(args[1:]) {
+			wooUpdateCategoryHelp(stdout)
+			return nil
+		}
+		return runWooUpdateCategory(args[1:], stdout, g, client, stats)
+	case "delete-category":
+		if hasHelpArg(args[1:]) {
+			wooDeleteCategoryHelp(stdout)
+			return nil
+		}
+		return runWooDeleteCategory(args[1:], stdout, g, client, stats)
 	case "categories":
 		if hasHelpArg(args[1:]) {
 			wooCategoriesHelp(stdout)
@@ -1705,6 +1717,10 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooReplaceHelp(w)
 	case "create-category":
 		wooCreateCategoryHelp(w)
+	case "update-category":
+		wooUpdateCategoryHelp(w)
+	case "delete-category":
+		wooDeleteCategoryHelp(w)
 	case "categories":
 		wooCategoriesHelp(w)
 	case "brands":
@@ -1801,6 +1817,8 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")
 	fmt.Fprintln(w, "  replace        Find and replace text in one product field (write operation)")
 	fmt.Fprintln(w, "  create-category  Create a product category (write operation)")
+	fmt.Fprintln(w, "  update-category  Rename a category or move it to another parent (write operation)")
+	fmt.Fprintln(w, "  delete-category  Delete an empty category, permanently (write operation)")
 	fmt.Fprintln(w, "  categories     List product categories as a tree with IDs")
 	fmt.Fprintln(w, "  brands         List product brands with IDs")
 	fmt.Fprintln(w, "  tags           List product tags with IDs")

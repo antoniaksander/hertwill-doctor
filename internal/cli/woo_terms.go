@@ -683,3 +683,249 @@ func wooCreateCategoryHelp(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Refuses if a category with the same name already exists.")
 }
+
+// categoryTree indexes every category by ID for parent/child checks.
+type categoryTree map[int]woocommerce.Category
+
+func loadCategoryTree(client woocommerce.Client) (categoryTree, error) {
+	cats, err := client.ListCategories(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	tree := categoryTree{}
+	for _, c := range cats {
+		c.Name = html.UnescapeString(c.Name)
+		tree[c.ID] = c
+	}
+	return tree, nil
+}
+
+// path returns "Parent > Child" for a category, or "(top level)" for 0.
+func (t categoryTree) path(id int) string {
+	if id == 0 {
+		return "(top level)"
+	}
+	var parts []string
+	for seen := map[int]bool{}; id != 0 && !seen[id]; {
+		seen[id] = true
+		c, ok := t[id]
+		if !ok {
+			parts = append([]string{fmt.Sprintf("#%d", id)}, parts...)
+			break
+		}
+		parts = append([]string{c.Name}, parts...)
+		id = c.Parent
+	}
+	return strings.Join(parts, " > ")
+}
+
+func (t categoryTree) children(id int) []woocommerce.Category {
+	var out []woocommerce.Category
+	for _, c := range t {
+		if c.Parent == id {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// isDescendant reports whether candidate sits anywhere below id.
+func (t categoryTree) isDescendant(candidate, id int) bool {
+	for seen := map[int]bool{}; candidate != 0 && !seen[candidate]; {
+		seen[candidate] = true
+		c, ok := t[candidate]
+		if !ok {
+			return false
+		}
+		if c.Parent == id {
+			return true
+		}
+		candidate = c.Parent
+	}
+	return false
+}
+
+func runWooUpdateCategory(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo update-category", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.Int("id", 0, "")
+	name := fs.String("name", "", "")
+	parent := fs.Int("parent", 0, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	parentSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "parent" {
+			parentSet = true
+		}
+	})
+	newName := strings.TrimSpace(*name)
+	if *id <= 0 {
+		return fmt.Errorf("--id is required")
+	}
+	if newName == "" && !parentSet {
+		return fmt.Errorf("give --name and/or --parent")
+	}
+	tree, err := loadCategoryTree(client)
+	if err != nil {
+		return err
+	}
+	cat, ok := tree[*id]
+	if !ok {
+		return fmt.Errorf("category %d not found", *id)
+	}
+	var namePtr *string
+	if newName != "" {
+		if newName == cat.Name {
+			return fmt.Errorf("category %d is already called %q", *id, newName)
+		}
+		for _, c := range tree {
+			if c.ID != *id && strings.EqualFold(c.Name, newName) {
+				return fmt.Errorf("category %q already exists (ID %d, parent %d)", newName, c.ID, c.Parent)
+			}
+		}
+		namePtr = &newName
+	}
+	var parentPtr *int
+	if parentSet {
+		switch {
+		case *parent < 0:
+			return fmt.Errorf("--parent must be a category ID, or 0 for top level")
+		case *parent == *id:
+			return fmt.Errorf("a category can't be its own parent")
+		case *parent == cat.Parent:
+			return fmt.Errorf("category %d is already under %s", *id, tree.path(*parent))
+		case *parent != 0 && tree[*parent].ID == 0:
+			return fmt.Errorf("parent category %d not found", *parent)
+		case tree.isDescendant(*parent, *id):
+			return fmt.Errorf("can't move %q under its own subcategory %s", cat.Name, tree.path(*parent))
+		}
+		parentPtr = parent
+	}
+
+	result := map[string]any{"mode": "dry-run", "id": cat.ID, "slug": cat.Slug, "before": map[string]any{"name": cat.Name, "parent": cat.Parent, "path": tree.path(cat.ID)}}
+	requested := map[string]any{}
+	if namePtr != nil {
+		requested["name"] = *namePtr
+	}
+	if parentPtr != nil {
+		requested["parent"] = *parentPtr
+		requested["parent_path"] = tree.path(*parentPtr)
+	}
+	result["requested"] = requested
+	if *confirm {
+		result["mode"] = "confirm"
+		updated, err := client.UpdateCategory(context.Background(), *id, namePtr, parentPtr)
+		if err != nil {
+			return err
+		}
+		result["after"] = map[string]any{"name": html.UnescapeString(updated.Name), "parent": updated.Parent, "slug": updated.Slug}
+	}
+	if g.json {
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "Category: %d %s (slug %s, %d published products)\n", cat.ID, tree.path(cat.ID), cat.Slug, cat.Count)
+	if namePtr != nil {
+		fmt.Fprintf(stdout, "Name:     %s -> %s\n", cat.Name, *namePtr)
+	}
+	if parentPtr != nil {
+		fmt.Fprintf(stdout, "Parent:   %s -> %s\n", tree.path(cat.Parent), tree.path(*parentPtr))
+		fmt.Fprintln(stdout, "Note:     moving changes the category URL; update menu links and add a redirect for the old one.")
+	}
+	after, done := result["after"].(map[string]any)
+	if !done {
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		return nil
+	}
+	fmt.Fprintf(stdout, "Now:      %v (parent %v, slug %v)\n", after["name"], after["parent"], after["slug"])
+	return nil
+}
+
+func wooUpdateCategoryHelp(w io.Writer) {
+	fmt.Fprintln(w, "Rename a WooCommerce product category and/or move it under another parent.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo update-category --id <ID> [--name <NAME>] [--parent <ID>] (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Sends only the given fields; the slug is never changed, so a rename keeps the URL.")
+	fmt.Fprintln(w, "--parent 0 moves it to the top level. Moving changes the URL path of the category")
+	fmt.Fprintln(w, "and its subcategories. Refuses a name another category already has, a parent that")
+	fmt.Fprintln(w, "doesn't exist, and a move under the category's own subcategory.")
+}
+
+func runWooDeleteCategory(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
+	fs := flag.NewFlagSet("woo delete-category", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.Int("id", 0, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	confirm := fs.Bool("confirm", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun == *confirm {
+		return fmt.Errorf("provide exactly one of --dry-run or --confirm")
+	}
+	if *id <= 0 {
+		return fmt.Errorf("--id is required")
+	}
+	tree, err := loadCategoryTree(client)
+	if err != nil {
+		return err
+	}
+	cat, ok := tree[*id]
+	if !ok {
+		return fmt.Errorf("category %d not found", *id)
+	}
+	if cat.Slug == "uncategorized" {
+		return fmt.Errorf("%q is WooCommerce's default category and can't be deleted; rename it instead", cat.Name)
+	}
+	if kids := tree.children(*id); len(kids) > 0 {
+		names := make([]string, 0, len(kids))
+		for _, k := range kids {
+			names = append(names, fmt.Sprintf("%s (%d)", k.Name, k.ID))
+		}
+		return fmt.Errorf("category %q has %d subcategories (%s); move or delete them first", cat.Name, len(kids), strings.Join(names, ", "))
+	}
+	hasProducts, err := client.CategoryHasProducts(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	if hasProducts {
+		return fmt.Errorf("category %q still has products (any status, incl. private); move them with set-terms first", cat.Name)
+	}
+
+	result := map[string]any{"mode": "dry-run", "id": cat.ID, "name": cat.Name, "slug": cat.Slug, "path": tree.path(cat.ID)}
+	if *confirm {
+		result["mode"] = "confirm"
+		if _, err := client.DeleteCategory(context.Background(), *id); err != nil {
+			return err
+		}
+		result["deleted"] = true
+	}
+	if g.json {
+		return writeJSON(stdout, result)
+	}
+	fmt.Fprintf(stdout, "Category: %d %s (slug %s), no products, no subcategories\n", cat.ID, tree.path(cat.ID), cat.Slug)
+	if result["deleted"] != true {
+		fmt.Fprintln(stdout, "Would be deleted permanently: categories have no trash.")
+		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
+		return nil
+	}
+	fmt.Fprintln(stdout, "Deleted permanently. Remove any menu links that pointed to it.")
+	return nil
+}
+
+func wooDeleteCategoryHelp(w io.Writer) {
+	fmt.Fprintln(w, "Delete an empty WooCommerce product category, permanently.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo delete-category --id <ID> (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Categories have no trash, so this can't be undone. Refuses if the category has")
+	fmt.Fprintln(w, "subcategories or any product in any status (private and draft too; WooCommerce's")
+	fmt.Fprintln(w, "own count only includes published products), and refuses the default category.")
+}
