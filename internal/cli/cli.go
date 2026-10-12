@@ -317,16 +317,25 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 		fs.SetOutput(io.Discard)
 		query := fs.String("query", "", "")
 		limit := fs.Int("limit", config.DefaultLimit, "")
+		tag := fs.Int("tag", 0, "")
+		category := fs.Int("category", 0, "")
+		brand := fs.Int("brand", 0, "")
+		page := fs.Int("page", 1, "")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *query == "" {
-			return fmt.Errorf("--query is required")
+		if *query == "" && *tag == 0 && *category == 0 && *brand == 0 {
+			return fmt.Errorf("provide --query and/or --tag, --category, --brand")
 		}
 		if err := config.ValidateLimit(*limit); err != nil {
 			return err
 		}
-		products, err := client.Search(context.Background(), *query, *limit)
+		if *page < 1 {
+			return fmt.Errorf("--page must be 1 or more")
+		}
+		products, err := client.SearchProducts(context.Background(), woocommerce.ProductFilter{
+			Search: *query, Tag: *tag, Category: *category, Brand: *brand, Limit: *limit, Page: *page,
+		})
 		if err != nil {
 			return err
 		}
@@ -357,6 +366,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooTerms("brands", args[1:], stdout, g, client)
+	case "tags":
+		if hasHelpArg(args[1:]) {
+			wooTagsHelp(stdout)
+			return nil
+		}
+		return runWooTerms("tags", args[1:], stdout, g, client)
 	case "replace":
 		if hasHelpArg(args[1:]) {
 			wooReplaceHelp(stdout)
@@ -1694,6 +1709,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooCategoriesHelp(w)
 	case "brands":
 		wooBrandsHelp(w)
+	case "tags":
+		wooTagsHelp(w)
 	default:
 		wooHelp(w)
 	}
@@ -1777,7 +1794,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  product        Look up a WooCommerce product by SKU or ID")
 	fmt.Fprintln(w, "  search         Search WooCommerce products")
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
-	fmt.Fprintln(w, "  set-terms      Replace a product's categories and/or brands (write operation)")
+	fmt.Fprintln(w, "  set-terms      Replace a product's categories, brands and/or tags (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
 	fmt.Fprintln(w, "  set-price      Change products' regular price, incl. all variations (write operation)")
 	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
@@ -1786,6 +1803,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  create-category  Create a product category (write operation)")
 	fmt.Fprintln(w, "  categories     List product categories as a tree with IDs")
 	fmt.Fprintln(w, "  brands         List product brands with IDs")
+	fmt.Fprintln(w, "  tags           List product tags with IDs")
 }
 
 func wooProductHelp(w io.Writer) {
@@ -1800,10 +1818,15 @@ func wooProductHelp(w io.Writer) {
 func wooSearchHelp(w io.Writer) {
 	fmt.Fprintln(w, "Search WooCommerce products.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage: hwd woo search --query <TEXT> [--limit <N>] [--json]")
+	fmt.Fprintln(w, "Usage: hwd woo search [--query <TEXT>] [--tag <ID>] [--category <ID>] [--brand <ID>]")
+	fmt.Fprintln(w, "       [--limit <N>] [--page <N>] [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Give --query and/or at least one of --tag, --category, --brand (term IDs from")
+	fmt.Fprintln(w, "hwd woo tags/categories/brands). Filters are combined.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --limit int   Maximum results to return, default 10, max 100")
+	fmt.Fprintln(w, "  --page int    Page of results, default 1; use with --limit 100 for big lists")
 }
 
 func wooRepairImagesHelp(w io.Writer) {

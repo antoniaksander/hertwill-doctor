@@ -312,3 +312,48 @@ func TestWooReplaceSendsOnlyThatField(t *testing.T) {
 		t.Fatal("expected refusal when text is not found")
 	}
 }
+
+func TestWooSetTermsAddTagsKeepsCurrentTags(t *testing.T) {
+	var puts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/wp-json/wc/v3/products/500" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodPut {
+			body, _ := io.ReadAll(r.Body)
+			puts = append(puts, string(body))
+			w.Write([]byte(`{"id":500,"name":"Overall","status":"publish","tags":[{"id":5,"name":"winter"},{"id":9,"name":"aw27"}]}`))
+			return
+		}
+		w.Write([]byte(`{"id":500,"name":"Overall","status":"publish","tags":[{"id":5,"name":"winter"},{"id":9,"name":"aw27"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	clearConfigEnv(t)
+	setWooEnv(t, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"woo", "set-terms", "--id", "500", "--add-tags", "9,12", "--confirm"}, &stdout, &stderr, BuildInfo{})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	// 9 is already on the product, so only 12 is added; only tags are sent.
+	if len(puts) != 1 || puts[0] != `{"tags":[{"id":5},{"id":9},{"id":12}]}` {
+		t.Fatalf("PUT bodies = %v", puts)
+	}
+	if !strings.Contains(stdout.String(), "tags winter (5), aw27 (9)") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestWooSetTermsTagsAndAddTagsConflict(t *testing.T) {
+	var puts []string
+	newTermsWooServer(t, &puts)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "set-terms", "--id", "31968", "--tags", "1", "--add-tags", "2", "--dry-run"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if len(puts) != 0 {
+		t.Fatalf("sent PUT: %v", puts)
+	}
+}

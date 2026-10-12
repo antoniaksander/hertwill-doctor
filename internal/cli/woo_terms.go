@@ -23,6 +23,7 @@ type setTermsReport struct {
 	Before         termsSnapshot    `json:"before"`
 	CategoryIDs    []int            `json:"category_ids,omitempty"`
 	BrandIDs       []int            `json:"brand_ids,omitempty"`
+	TagIDs         []int            `json:"tag_ids,omitempty"`
 	After          *termsSnapshot   `json:"after,omitempty"`
 	RequestSummary *httpstats.Stats `json:"request_summary,omitempty"`
 }
@@ -30,10 +31,11 @@ type setTermsReport struct {
 type termsSnapshot struct {
 	Categories []string `json:"categories"`
 	Brand      string   `json:"brand"`
+	Tags       []string `json:"tags"`
 }
 
 func snapshotTerms(p model.Product) termsSnapshot {
-	return termsSnapshot{Categories: p.Categories, Brand: p.Brand}
+	return termsSnapshot{Categories: p.Categories, Brand: p.Brand, Tags: p.Tags}
 }
 
 func runWooSetTerms(args []string, stdout io.Writer, g globals, client woocommerce.Client, stats *httpstats.Stats) error {
@@ -42,6 +44,8 @@ func runWooSetTerms(args []string, stdout io.Writer, g globals, client woocommer
 	id := fs.String("id", "", "")
 	categories := fs.String("categories", "", "")
 	brands := fs.String("brands", "", "")
+	tags := fs.String("tags", "", "")
+	addTags := fs.String("add-tags", "", "")
 	dryRun := fs.Bool("dry-run", false, "")
 	confirm := fs.Bool("confirm", false, "")
 	if err := fs.Parse(args); err != nil {
@@ -61,13 +65,27 @@ func runWooSetTerms(args []string, stdout io.Writer, g globals, client woocommer
 	if err != nil {
 		return err
 	}
-	if categoryIDs == nil && brandIDs == nil {
-		return fmt.Errorf("provide --categories and/or --brands")
+	tagIDs, err := parseTermIDs("--tags", *tags)
+	if err != nil {
+		return err
+	}
+	addTagIDs, err := parseTermIDs("--add-tags", *addTags)
+	if err != nil {
+		return err
+	}
+	if tagIDs != nil && addTagIDs != nil {
+		return fmt.Errorf("provide --tags or --add-tags, not both")
+	}
+	if categoryIDs == nil && brandIDs == nil && tagIDs == nil && len(addTagIDs) == 0 {
+		return fmt.Errorf("provide --categories, --brands, --tags and/or --add-tags")
 	}
 
 	product, err := client.ProductByID(context.Background(), *id)
 	if err != nil {
 		return err
+	}
+	if len(addTagIDs) > 0 {
+		tagIDs = mergeIDs(product.TagIDs, addTagIDs)
 	}
 	report := setTermsReport{
 		Mode:        "dry-run",
@@ -77,10 +95,11 @@ func runWooSetTerms(args []string, stdout io.Writer, g globals, client woocommer
 		Before:      snapshotTerms(product),
 		CategoryIDs: categoryIDs,
 		BrandIDs:    brandIDs,
+		TagIDs:      tagIDs,
 	}
 	if *confirm {
 		report.Mode = "confirm"
-		updated, err := client.UpdateProductTerms(context.Background(), *id, categoryIDs, brandIDs)
+		updated, err := client.UpdateProductTerms(context.Background(), *id, categoryIDs, brandIDs, tagIDs)
 		if err != nil {
 			return err
 		}
@@ -94,19 +113,46 @@ func runWooSetTerms(args []string, stdout io.Writer, g globals, client woocommer
 		return writeJSON(stdout, report)
 	}
 	fmt.Fprintf(stdout, "Product: %s %s (%s)\n", report.ProductID, report.Name, report.Status)
-	fmt.Fprintf(stdout, "Before:  categories %s; brand %s\n", joinOrNone(report.Before.Categories), fallbackNone(report.Before.Brand))
+	fmt.Fprintf(stdout, "Before:  categories %s; brand %s; tags %s\n", joinOrNone(report.Before.Categories), fallbackNone(report.Before.Brand), joinOrNone(report.Before.Tags))
 	if categoryIDs != nil {
 		fmt.Fprintf(stdout, "Set categories to IDs: %s\n", joinInts(categoryIDs))
 	}
 	if brandIDs != nil {
 		fmt.Fprintf(stdout, "Set brands to IDs: %s\n", joinInts(brandIDs))
 	}
+	if tagIDs != nil {
+		fmt.Fprintf(stdout, "Set tags to IDs: %s\n", joinOrNoneInts(tagIDs))
+	}
 	if report.After == nil {
 		fmt.Fprintln(stdout, "\nDry run only. No WooCommerce changes were made.")
 		return nil
 	}
-	fmt.Fprintf(stdout, "After:   categories %s; brand %s\n", joinOrNone(report.After.Categories), fallbackNone(report.After.Brand))
+	fmt.Fprintf(stdout, "After:   categories %s; brand %s; tags %s\n", joinOrNone(report.After.Categories), fallbackNone(report.After.Brand), joinOrNone(report.After.Tags))
 	return nil
+}
+
+// mergeIDs returns current followed by the IDs from add that it doesn't
+// already contain.
+func mergeIDs(current, add []int) []int {
+	out := append([]int{}, current...)
+	seen := map[int]bool{}
+	for _, id := range current {
+		seen[id] = true
+	}
+	for _, id := range add {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func joinOrNoneInts(ids []int) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+	return joinInts(ids)
 }
 
 // parseTermIDs returns nil when the flag was not given, so that field is left
@@ -145,13 +191,15 @@ func fallbackNone(value string) string {
 }
 
 func wooSetTermsHelp(w io.Writer) {
-	fmt.Fprintln(w, "Replace a WooCommerce product's categories and/or brands.")
+	fmt.Fprintln(w, "Replace a WooCommerce product's categories, brands and/or tags.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage: hwd woo set-terms --id <ID> [--categories <ID,ID,...>] [--brands <ID,...>] (--dry-run | --confirm) [--json]")
+	fmt.Fprintln(w, "Usage: hwd woo set-terms --id <ID> [--categories <ID,ID,...>] [--brands <ID,...>]")
+	fmt.Fprintln(w, "       [--tags <ID,...> | --add-tags <ID,...>] (--dry-run | --confirm) [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "The given lists replace the current ones; a flag that is left out is not changed.")
-	fmt.Fprintln(w, "Use \"none\" to clear a list. Only categories and brands are sent: price, stock,")
-	fmt.Fprintln(w, "status and content are never touched, and the product is never published.")
+	fmt.Fprintln(w, "--add-tags keeps the product's current tags and adds the given ones.")
+	fmt.Fprintln(w, "Use \"none\" to clear a list. Only categories, brands and tags are sent: price,")
+	fmt.Fprintln(w, "stock, status and content are never touched, and the product is never published.")
 }
 
 var allowedStatuses = map[string]bool{"publish": true, "private": true, "draft": true, "pending": true}

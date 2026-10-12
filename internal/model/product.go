@@ -16,6 +16,8 @@ type Product struct {
 	Brand      string      `json:"brand,omitempty"`
 	Category   string      `json:"category,omitempty"`
 	Categories []string    `json:"categories,omitempty"`
+	Tags       []string    `json:"tags,omitempty"`
+	TagIDs     []int       `json:"-"`
 	Slug       string      `json:"slug,omitempty"`
 	Variations []Variation `json:"variations,omitempty"`
 }

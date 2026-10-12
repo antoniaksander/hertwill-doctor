@@ -6,7 +6,7 @@ If you sell [Hertwill](https://hertwill.com) products in a WooCommerce shop, `hw
 
 - see your Hertwill import list, with costs and variants
 - add products to the import list and sync them to your shop at the price you choose
-- set prices, categories, brand and publish status in WooCommerce
+- set prices, categories, brand, tags and publish status in WooCommerce
 - find out why a product looks wrong (missing images, wrong price, failed sync)
 
 It talks to the Hertwill and WooCommerce APIs directly. Every change needs an explicit `--dry-run` or `--confirm`, prices are always the final selling price, and synced products stay private until you publish them.

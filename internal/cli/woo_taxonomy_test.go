@@ -119,3 +119,53 @@ func TestWooBrandsLists(t *testing.T) {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
+
+func TestWooTagsAndSearchByTag(t *testing.T) {
+	var searchQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/wp-json/wc/v3/products/tags":
+			w.Write([]byte(`[{"id":9,"name":"aw27","slug":"aw27","parent":0,"count":3},{"id":5,"name":"winter","slug":"winter","parent":0,"count":40}]`))
+		case "/wp-json/wc/v3/products":
+			searchQuery = r.URL.RawQuery
+			w.Write([]byte(`[{"id":500,"name":"Overall","sku":"26217","status":"publish","tags":[{"id":9,"name":"aw27"}]}]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	clearConfigEnv(t)
+	setWooEnv(t, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "tags", "--contains", "aw"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "9     aw27 (3)") || strings.Contains(stdout.String(), "winter") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+
+	stdout.Reset()
+	if code := Run([]string{"woo", "search", "--tag", "9", "--brand", "777", "--limit", "100", "--page", "2", "--json"}, &stdout, &stderr, BuildInfo{}); code != 0 {
+		t.Fatalf("code = %d stderr=%q", code, stderr.String())
+	}
+	for _, want := range []string{"tag=9", "brand=777", "per_page=100", "page=2"} {
+		if !strings.Contains(searchQuery, want) {
+			t.Fatalf("query %q missing %q", searchQuery, want)
+		}
+	}
+	if strings.Contains(searchQuery, "search=") {
+		t.Fatalf("empty search sent: %q", searchQuery)
+	}
+	if !strings.Contains(stdout.String(), `"tags"`) {
+		t.Fatalf("tags missing from JSON: %s", stdout.String())
+	}
+}
+
+func TestWooSearchNeedsQueryOrFilter(t *testing.T) {
+	newTermsListServer(t, 0)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"woo", "search"}, &stdout, &stderr, BuildInfo{}); code == 0 {
+		t.Fatal("expected failure")
+	}
+}

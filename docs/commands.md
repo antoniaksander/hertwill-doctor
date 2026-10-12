@@ -42,13 +42,13 @@ JSON output includes separate `config_checks` and `live_checks` objects. Debug o
 hwd woo product --sku ABC123
 hwd woo product --id 123
 hwd woo search --query "boots" --limit 10
+hwd woo search --tag 761 --limit 100 --page 2
+hwd woo search --brand 777 --category 766 --limit 100
 ```
 
 For `hwd woo product`, provide either `--sku` or `--id`. If both are provided, the command returns an error. SKU remains the primary sync diagnostic path. `--sku <SKU> --trash` looks in the WooCommerce trash instead (the default lookup skips trashed products, but their SKUs still block a new product with the same SKU).
 
-Search defaults to `--limit 10` and enforces a maximum of `100`. Output may be truncated by the default limit.
-
-Future note: pagination may add `--page`.
+Search defaults to `--limit 10` and enforces a maximum of `100`. Output may be truncated by the default limit; use `--page` for the next 100. Instead of (or with) `--query`, filter by term ID: `--tag`, `--category`, `--brand` (IDs from `woo tags` / `woo categories` / `woo brands`). Filters are combined.
 
 ### WooCommerce image repair
 
@@ -94,15 +94,16 @@ JSON output (`--json`) includes `mode`, `changed`, `woocommerce_before`, `woocom
 
 Debug output (`--debug`) never dumps the full list of image URLs being sent in the `PUT` body — for the image update request it logs `WooCommerce PUT image count: N` instead, to keep debug output readable for large batches. The full URL list is still available in normal dry-run output and JSON.
 
-## WooCommerce categories and brands
+## WooCommerce categories, brands and tags
 
 ```sh
 hwd woo categories
 hwd woo categories --contains beauty
 hwd woo brands --contains fox --json
+hwd woo tags --contains aw
 ```
 
-Read-only. `categories` reads every page of `GET /wp-json/wc/v3/products/categories` and prints the tree with ID, name and product count, children indented under their parent. `brands` does the same for `GET /wp-json/wc/v3/products/brands`. `--contains` keeps matching terms plus their parents, so each match shows its full path. `--json` adds each term's `path` (e.g. `Women > Women Beauty products > Women Creams & Scrubs`). Use the IDs with `woo set-terms`. Product counts are WooCommerce's own and only include published products.
+Read-only. `categories` reads every page of `GET /wp-json/wc/v3/products/categories` and prints the tree with ID, name and product count, children indented under their parent. `brands` does the same for `GET /wp-json/wc/v3/products/brands`, and `tags` for `GET /wp-json/wc/v3/products/tags` (tags have no parents). `--contains` keeps matching terms plus their parents, so each match shows its full path. `--json` adds each term's `path` (e.g. `Women > Women Beauty products > Women Creams & Scrubs`). Use the IDs with `woo set-terms`. Product counts are WooCommerce's own and only include published products.
 
 ## WooCommerce product edits
 
@@ -110,6 +111,7 @@ Every edit needs exactly one of `--dry-run` or `--confirm`, sends only the field
 
 ```sh
 hwd woo set-terms --id 31968 --categories 54,765 --brands 780 --dry-run
+hwd woo set-terms --id 33387 --add-tags 761 --dry-run
 hwd woo set-status --id 31968 --status publish --dry-run
 hwd woo set-price --id 9415 --price 32.50 --dry-run
 hwd woo set-price --file prices.txt --confirm
@@ -119,7 +121,7 @@ hwd woo trash --id 9427 --dry-run
 hwd woo create-category --name "Stroller Accessories" --parent 283 --dry-run
 ```
 
-- `set-terms` replaces a product's categories and/or brands. A flag that is left out is not changed; `none` clears a list.
+- `set-terms` replaces a product's categories, brands and/or tags. A flag that is left out is not changed; `none` clears a list. `--add-tags` keeps the current tags and adds the given ones (use it for season tags); it can't be combined with `--tags`.
 - `set-status` changes only the status: `publish`, `private`, `draft` or `pending`.
 - `set-price` changes only the regular price incl. VAT. For a variable product it sets the same price on every variation (`POST /products/{id}/variations/batch`, 100 per request). The file has one `<woo id> <price>` per line. Sale prices are reported, not changed. Use it to reprice live products; `hwd hertwill sync` refuses products that are already synced. A later Hertwill re-sync may set its own price again.
 - `set-name` changes the title; the URL slug stays.

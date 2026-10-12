@@ -30,8 +30,8 @@ type termReport struct {
 	Count    int         `json:"count"`
 }
 
-// runWooTerms lists categories or brands as a tree. kind is "categories" or
-// "brands". Read-only.
+// runWooTerms lists categories, brands or tags as a tree. kind is
+// "categories", "brands" or "tags". Read-only.
 func runWooTerms(kind string, args []string, stdout io.Writer, g globals, client woocommerce.Client) error {
 	fs := flag.NewFlagSet("woo "+kind, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -41,9 +41,12 @@ func runWooTerms(kind string, args []string, stdout io.Writer, g globals, client
 	}
 	var terms []woocommerce.Category
 	var err error
-	if kind == "brands" {
+	switch kind {
+	case "brands":
 		terms, err = client.ListBrands(context.Background())
-	} else {
+	case "tags":
+		terms, err = client.ListTags(context.Background())
+	default:
 		terms, err = client.ListCategories(context.Background())
 	}
 	if err != nil {
@@ -131,4 +134,13 @@ func wooBrandsHelp(w io.Writer) {
 	fmt.Fprintln(w, "Usage: hwd woo brands [--contains <TEXT>] [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Read-only. Use the IDs with hwd woo set-terms --brands.")
+}
+
+func wooTagsHelp(w io.Writer) {
+	fmt.Fprintln(w, "List WooCommerce product tags with IDs and product counts.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: hwd woo tags [--contains <TEXT>] [--json]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Read-only. Use the IDs with hwd woo set-terms --tags/--add-tags, and")
+	fmt.Fprintln(w, "hwd woo search --tag <ID> to list a tag's products.")
 }
