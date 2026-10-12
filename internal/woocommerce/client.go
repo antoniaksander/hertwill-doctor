@@ -107,8 +107,40 @@ func (c Client) ProductByID(ctx context.Context, id string) (model.Product, erro
 }
 
 func (c Client) Search(ctx context.Context, query string, limit int) ([]model.Product, error) {
+	return c.SearchProducts(ctx, ProductFilter{Search: query, Limit: limit})
+}
+
+// ProductFilter narrows a product listing. Zero values are left out of the
+// request.
+type ProductFilter struct {
+	Search   string
+	Tag      int
+	Category int
+	Brand    int
+	Limit    int
+	Page     int
+}
+
+// SearchProducts lists products matching the filter via GET /products.
+func (c Client) SearchProducts(ctx context.Context, f ProductFilter) ([]model.Product, error) {
+	query := url.Values{"per_page": {strconv.Itoa(f.Limit)}}
+	if f.Search != "" {
+		query.Set("search", f.Search)
+	}
+	if f.Tag > 0 {
+		query.Set("tag", strconv.Itoa(f.Tag))
+	}
+	if f.Category > 0 {
+		query.Set("category", strconv.Itoa(f.Category))
+	}
+	if f.Brand > 0 {
+		query.Set("brand", strconv.Itoa(f.Brand))
+	}
+	if f.Page > 1 {
+		query.Set("page", strconv.Itoa(f.Page))
+	}
 	var products []wooProduct
-	err := c.get(ctx, "/wp-json/wc/v3/products", url.Values{"search": {query}, "per_page": {strconv.Itoa(limit)}}, &products)
+	err := c.get(ctx, "/wp-json/wc/v3/products", query, &products)
 	if err != nil {
 		return nil, err
 	}
@@ -145,10 +177,10 @@ func (c Client) UpdateProductImages(ctx context.Context, id string, imageURLs []
 	return product.toModel(), nil
 }
 
-// UpdateProductTerms replaces a product's categories and/or brands via
+// UpdateProductTerms replaces a product's categories, brands and/or tags via
 // PUT /products/{id}. A nil slice leaves that field out of the request, so
 // only the fields being changed are sent.
-func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, brandIDs []int) (model.Product, error) {
+func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, brandIDs, tagIDs []int) (model.Product, error) {
 	type termRef struct {
 		ID int `json:"id"`
 	}
@@ -166,6 +198,9 @@ func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, 
 	if brandIDs != nil {
 		payload["brands"] = refs(brandIDs)
 	}
+	if tagIDs != nil {
+		payload["tags"] = refs(tagIDs)
+	}
 	if len(payload) == 0 {
 		return model.Product{}, fmt.Errorf("nothing to update")
 	}
@@ -173,7 +208,7 @@ func (c Client) UpdateProductTerms(ctx context.Context, id string, categoryIDs, 
 	if err != nil {
 		return model.Product{}, err
 	}
-	debugBodySummary := fmt.Sprintf("WooCommerce PUT categories: %v brands: %v", categoryIDs, brandIDs)
+	debugBodySummary := fmt.Sprintf("WooCommerce PUT categories: %v brands: %v tags: %v", categoryIDs, brandIDs, tagIDs)
 	var product wooProduct
 	if err := c.put(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), body, debugBodySummary, &product); err != nil {
 		return model.Product{}, err
@@ -322,6 +357,11 @@ func (c Client) ListCategories(ctx context.Context) ([]Category, error) {
 // ListBrands returns every product brand (WooCommerce Brands), following pages.
 func (c Client) ListBrands(ctx context.Context) ([]Category, error) {
 	return c.listTerms(ctx, "/wp-json/wc/v3/products/brands")
+}
+
+// ListTags returns every product tag, following pages. Tags have no parent.
+func (c Client) ListTags(ctx context.Context) ([]Category, error) {
+	return c.listTerms(ctx, "/wp-json/wc/v3/products/tags")
 }
 
 func (c Client) listTerms(ctx context.Context, path string) ([]Category, error) {
@@ -562,6 +602,7 @@ type wooProduct struct {
 	StockQuantity *int      `json:"stock_quantity"`
 	Categories    []wooTerm `json:"categories"`
 	Brands        []wooTerm `json:"brands"`
+	Tags          []wooTerm `json:"tags"`
 }
 
 type wooTerm struct {
@@ -597,5 +638,15 @@ func (p wooProduct) toModel() model.Product {
 		Status:     p.Status,
 		Brand:      strings.Join(termLabels(p.Brands), ", "),
 		Categories: termLabels(p.Categories),
+		Tags:       termLabels(p.Tags),
+		TagIDs:     termIDs(p.Tags),
 	}
+}
+
+func termIDs(terms []wooTerm) []int {
+	ids := make([]int, 0, len(terms))
+	for _, term := range terms {
+		ids = append(ids, term.ID)
+	}
+	return ids
 }
