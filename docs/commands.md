@@ -119,6 +119,9 @@ hwd woo set-name --id 1636 --name "New name" --dry-run
 hwd woo replace --id 1636 --field short_description --find Old --replace New --dry-run
 hwd woo trash --id 9427 --dry-run
 hwd woo create-category --name "Stroller Accessories" --parent 283 --dry-run
+hwd woo update-category --id 237 --name "Men Clothing" --dry-run
+hwd woo update-category --id 230 --parent 793 --dry-run
+hwd woo delete-category --id 650 --dry-run
 ```
 
 - `set-terms` replaces a product's categories, brands and/or tags. A flag that is left out is not changed; `none` clears a list. `--add-tags` keeps the current tags and adds the given ones (use it for season tags); it can't be combined with `--tags`.
@@ -128,6 +131,8 @@ hwd woo create-category --name "Stroller Accessories" --parent 283 --dry-run
 - `replace` does a case-sensitive find and replace in one of `name`, `slug`, `short_description` or `description`, and refuses if the text isn't found.
 - `trash` moves a product to the bin; it is never deleted permanently. Remove it from the Hertwill import list too, or a later sync may create it again.
 - `create-category` refuses if a category with the same name already exists.
+- `update-category` renames a category (`--name`) and/or moves it (`--parent`, `0` for top level), sending only those fields. The slug is never changed, so a rename keeps the URL; a move changes the URL path of the category and its subcategories. It refuses a name another category already has, a parent that doesn't exist, and a move under the category's own subcategory.
+- `delete-category` deletes a category permanently (`DELETE /products/categories/{id}?force=true`; terms have no trash). It refuses if the category has subcategories or any product in any status, checked with `GET /products?category={id}&status=any`, because WooCommerce's own category count leaves out private and draft products. It also refuses the default category (`uncategorized`). Product `trash` still never sends `force`.
 
 ## Hertwill
 

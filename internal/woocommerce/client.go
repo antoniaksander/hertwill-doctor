@@ -399,6 +399,48 @@ func (c Client) CreateCategory(ctx context.Context, name string, parent int) (Ca
 	return cat, err
 }
 
+// UpdateCategory changes a category's name and/or parent via
+// PUT /products/categories/{id}. A nil field is left out of the request, so
+// only the given fields change; the slug (URL) is never sent.
+func (c Client) UpdateCategory(ctx context.Context, id int, name *string, parent *int) (Category, error) {
+	fields := map[string]any{}
+	if name != nil {
+		fields["name"] = *name
+	}
+	if parent != nil {
+		fields["parent"] = *parent
+	}
+	body, err := json.Marshal(fields)
+	if err != nil {
+		return Category{}, err
+	}
+	var cat Category
+	err = c.put(ctx, "/wp-json/wc/v3/products/categories/"+strconv.Itoa(id), body, "WooCommerce PUT category "+strconv.Itoa(id), &cat)
+	return cat, err
+}
+
+// CategoryHasProducts reports whether any product in any status (including
+// private and draft) is in the category. WooCommerce's own category count
+// only includes published products, so it can't be used for this.
+func (c Client) CategoryHasProducts(ctx context.Context, id int) (bool, error) {
+	query := url.Values{"category": {strconv.Itoa(id)}, "status": {"any"}, "per_page": {"1"}}
+	var products []wooProduct
+	if err := c.get(ctx, "/wp-json/wc/v3/products", query, &products); err != nil {
+		return false, err
+	}
+	return len(products) > 0, nil
+}
+
+// DeleteCategory permanently deletes a category via
+// DELETE /products/categories/{id}?force=true. Terms have no trash, so
+// WooCommerce requires force; it is only ever sent for categories.
+func (c Client) DeleteCategory(ctx context.Context, id int) (Category, error) {
+	var cat Category
+	err := c.sendQuery(ctx, http.MethodDelete, "/wp-json/wc/v3/products/categories/"+strconv.Itoa(id),
+		url.Values{"force": {"true"}}, nil, "WooCommerce DELETE category "+strconv.Itoa(id)+" (permanent)", &cat)
+	return cat, err
+}
+
 // UpdateProductName changes only a product's name via PUT /products/{id}.
 // The slug (URL) is left as it is.
 func (c Client) UpdateProductName(ctx context.Context, id, name string) (model.Product, error) {
@@ -510,6 +552,12 @@ func (c Client) TrashProduct(ctx context.Context, id string) (model.Product, err
 }
 
 func (c Client) send(ctx context.Context, method, path string, body []byte, debugBodySummary string, target any) error {
+	return c.sendQuery(ctx, method, path, nil, body, debugBodySummary, target)
+}
+
+// sendQuery is send with extra query parameters. Only DeleteCategory passes
+// any (force=true); every other write goes through send, which never forces.
+func (c Client) sendQuery(ctx context.Context, method, path string, extra url.Values, body []byte, debugBodySummary string, target any) error {
 	base, err := url.Parse(strings.TrimRight(c.BaseURL, "/"))
 	if err != nil {
 		return fmt.Errorf("invalid WooCommerce base URL: %w", err)
@@ -528,6 +576,11 @@ func (c Client) send(ctx context.Context, method, path string, body []byte, debu
 	defer cancel()
 
 	q.Del("force")
+	for key, values := range extra {
+		for _, v := range values {
+			q.Add(key, v)
+		}
+	}
 	base.RawQuery = q.Encode()
 	var reader io.Reader
 	if body != nil {
