@@ -8,7 +8,8 @@ Read this before running anything. It applies to Claude Code, Codex and any othe
 
 - read the Hertwill import list and catalog
 - add products to the import list and sync them to WooCommerce at a set price
-- set a WooCommerce product's categories, brand and status (publish)
+- set a WooCommerce product's categories, brand, shipping class and status (publish)
+- read brands' delivery rates for shipping classes
 - diagnose why a product looks wrong in the shop
 
 It replaces the `@hertwill/mcp` write tools, which can't sync products with variants, and the WooCommerce MCP update tool, which currently fails. Their read tools are fine to use alongside `hwd`.
@@ -41,6 +42,18 @@ Ask the user for anything the task doesn't already say. Don't assume:
 
 Compare **in-stock** listings only and give links. Show cost, proposed price, and profit at full price and after the usual discount. Profit excludes shipping and payment fees; say so.
 
+## Shipping classes on import
+
+Hertwill charges the store each brand's delivery fee (per order, or per item for bulky brands). If the store passes these on with WooCommerce shipping classes (ask the user, or check whether products of the same brand already have one):
+
+1. **Check** the brand's class: `hwd woo product --sku <sku of a live product of the same brand>` shows its `Shipping class`.
+2. **If the brand has no class yet**, get its rates with `hwd hertwill brand-shipping --brands <brand ID>` (brand ID: `hwd hertwill product --id <ID> --raw`, `data.brand.id`). Propose the class and its per-country costs to the user, and create it only after their OK (WooCommerce › Settings › Shipping › Classes, then the class cost in each zone's Flat rate). Countries without a price are not deliverable; enter them as the store's "not deliverable" cost if it has one.
+3. **Per-item brands** with several lists: each product needs the class of its own list (`shipping_price_id` on the product's hertwill.com page).
+4. **After syncing**, give every new product its class: `hwd woo set-shipping-class --id <ID> --class <slug> --dry-run`, then `--confirm`. Synced products arrive without one.
+5. Report products that ship to fewer countries than the store sells to.
+
+The class naming, fee formula and zones are store-specific: follow the user's rules or the store's own docs.
+
 ## Safety rules
 
 - Every write needs `--dry-run` or `--confirm`. Run the dry run, show the result, and get the user's OK before every `--confirm`.
@@ -57,7 +70,7 @@ The full step-by-step workflow is in `.claude/skills/hertwill-sync/SKILL.md`. In
 1. `hwd doctor`, then `hwd hertwill import-list` (`--contains <text>` to filter).
 2. Agree prices with the user. Check competitor prices if asked; show cost, price and profit in a table.
 3. Write a price file (`<id> <price>` per line), `hwd hertwill sync --file <path> --dry-run`, then `--confirm`.
-4. `hwd woo set-terms` for categories and brand (copy IDs from a similar product), then report.
+4. `hwd woo set-terms` for categories and brand (copy IDs from a similar product), and `hwd woo set-shipping-class` if the store uses brand classes (see above), then report.
 5. Publish with `hwd woo set-status --status publish` only after the user approves the table.
 
 Keep reports short: one table with name, price, status, and any failures with Hertwill's message.

@@ -1,25 +1,27 @@
 package model
 
 type Product struct {
-	Found      bool        `json:"found"`
-	ID         string      `json:"id,omitempty"`
-	Name       string      `json:"name,omitempty"`
-	SKU        string      `json:"sku,omitempty"`
-	Price      string      `json:"price,omitempty"`
-	Regular    string      `json:"regular_price,omitempty"`
-	Sale       string      `json:"sale_price,omitempty"`
-	Type       string      `json:"type,omitempty"`
-	Stock      string      `json:"stock,omitempty"`
-	ImageCount *int        `json:"image_count,omitempty"`
-	ImageURLs  []string    `json:"image_urls,omitempty"`
-	Status     string      `json:"status,omitempty"`
-	Brand      string      `json:"brand,omitempty"`
-	Category   string      `json:"category,omitempty"`
-	Categories []string    `json:"categories,omitempty"`
-	Tags       []string    `json:"tags,omitempty"`
-	TagIDs     []int       `json:"-"`
-	Slug       string      `json:"slug,omitempty"`
-	Variations []Variation `json:"variations,omitempty"`
+	Found      bool     `json:"found"`
+	ID         string   `json:"id,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	SKU        string   `json:"sku,omitempty"`
+	Price      string   `json:"price,omitempty"`
+	Regular    string   `json:"regular_price,omitempty"`
+	Sale       string   `json:"sale_price,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Stock      string   `json:"stock,omitempty"`
+	ImageCount *int     `json:"image_count,omitempty"`
+	ImageURLs  []string `json:"image_urls,omitempty"`
+	Status     string   `json:"status,omitempty"`
+	Brand      string   `json:"brand,omitempty"`
+	Category   string   `json:"category,omitempty"`
+	Categories []string `json:"categories,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	TagIDs     []int    `json:"-"`
+	Slug       string   `json:"slug,omitempty"`
+	// ShippingClass is the WooCommerce shipping class slug.
+	ShippingClass string      `json:"shipping_class,omitempty"`
+	Variations    []Variation `json:"variations,omitempty"`
 }
 
 type Variation struct {

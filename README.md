@@ -34,6 +34,13 @@ Sync a product at your price, check it, then publish:
 ./hwd woo set-status --id <woo id> --status publish --confirm
 ```
 
+If the store charges each brand's delivery through shipping classes, look up the brand's rates and give the new product its class:
+
+```sh
+./hwd hertwill brand-shipping --brands <hertwill brand id>
+./hwd woo set-shipping-class --id <woo id> --class <slug> --dry-run
+```
+
 Reprice a product that is already live (simple or variable):
 
 ```sh

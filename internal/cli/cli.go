@@ -414,6 +414,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetStatus(args[1:], stdout, g, client, stats)
+	case "set-shipping-class":
+		if hasHelpArg(args[1:]) {
+			wooSetShippingClassHelp(stdout)
+			return nil
+		}
+		return runWooSetShippingClass(args[1:], stdout, g, client, stats)
 	default:
 		return fmt.Errorf("unknown woo subcommand %q", args[0])
 	}
@@ -897,6 +903,12 @@ func runHertwill(args []string, stdout, _ io.Writer, g globals, cfg config.Confi
 			return nil
 		}
 		return runHertwillSyncJob(args[1:], stdout, client)
+	case "brand-shipping":
+		if hasHelpArg(args[1:]) {
+			hertwillBrandShippingHelp(stdout)
+			return nil
+		}
+		return runHertwillBrandShipping(args[1:], stdout, g, client)
 	case "sync-status":
 		if hasHelpArg(args[1:]) {
 			hertwillSyncStatusHelp(stdout)
@@ -1450,6 +1462,7 @@ func printProduct(w io.Writer, g globals, product model.Product) error {
 	}
 	fmt.Fprintf(tw, "Status\t%s\n", fallback(product.Status))
 	fmt.Fprintf(tw, "Brand\t%s\n", fallback(product.Brand))
+	fmt.Fprintf(tw, "Shipping class\t%s\n", fallback(product.ShippingClass))
 	fmt.Fprintf(tw, "Category\t%s\n", fallback(product.Category))
 	if len(product.Categories) > 0 {
 		fmt.Fprintf(tw, "Categories\t%s\n", strings.Join(product.Categories, ", "))
@@ -1707,6 +1720,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooSetTermsHelp(w)
 	case "set-status":
 		wooSetStatusHelp(w)
+	case "set-shipping-class":
+		wooSetShippingClassHelp(w)
 	case "set-price":
 		wooSetPriceHelp(w)
 	case "set-name":
@@ -1756,6 +1771,8 @@ func hertwillHelpFor(args []string, w io.Writer) {
 		hertwillSyncHelp(w)
 	case "sync-job":
 		hertwillSyncJobHelp(w)
+	case "brand-shipping":
+		hertwillBrandShippingHelp(w)
 	default:
 		hertwillHelp(w)
 	}
@@ -1812,6 +1829,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories, brands and/or tags (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
+	fmt.Fprintln(w, "  set-shipping-class  Set a product's shipping class (write operation)")
 	fmt.Fprintln(w, "  set-price      Change products' regular price, incl. all variations (write operation)")
 	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")
@@ -1896,6 +1914,7 @@ func hertwillHelp(w io.Writer) {
 	fmt.Fprintln(w, "  sync         Sync import-list products at a selling price (--dry-run | --confirm)")
 	fmt.Fprintln(w, "  sync-job     Show a product's sync job and recorded errors (read-only)")
 	fmt.Fprintln(w, "  sync-status  Show Hertwill sync status for a product")
+	fmt.Fprintln(w, "  brand-shipping  Show brands' per-country delivery rates (read-only)")
 }
 
 func hertwillListHelp(w io.Writer) {

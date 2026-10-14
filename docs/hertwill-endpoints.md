@@ -133,3 +133,14 @@ This file tracks endpoint assumptions for Hertwill Doctor v1. Unverified endpoin
 - response schema, if known: HTTP 202, `{"data": {"product_id", "status": "syncing", "message"}}`
 - verification status: verified against the live API (2026-10)
 - notes: `default_store_markup` is the absolute selling price, despite the name and docs. A multiplier like `2.0` is rejected with 422 `PRICE_BELOW_COST`. Products with variants need every variation or the API returns 422 "Variations are required for this product". 403 `FORBIDDEN` "You are not allowed to sync this product" was seen for products hidden from the import list. Used by `hwd hertwill sync`.
+
+## Brand Shipping Price Lists
+
+- name: brand shipping price lists
+- HTTP method: `GET`
+- path: `/v1/brands/{id}/shipping-price-lists`
+- auth required: no, but prices are only included with the API key (public responses return `price: null`)
+- request schema, if known: path parameter `id` (Hertwill brand ID)
+- response schema, if known: `{"data": [{"id", "name", "per_item", "shipping_prices": [{"id", "origin_iso_code", "dest_iso_code", "price", "origin_country", "destination_country"}]}]}`
+- verification status: verified against the live API (2026-10)
+- notes: authenticated `price` is a plain number (EUR, excl. VAT); public responses use `{"amount", "currency"}` or null. null = not delivered to that country, 0 = free. Used by `hwd hertwill brand-shipping`.

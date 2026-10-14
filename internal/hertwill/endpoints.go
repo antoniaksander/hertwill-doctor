@@ -15,6 +15,7 @@ const (
 	ImportListProductPath  = "/v1/import-list/products/{productId}"
 	SyncProductsPath       = "/v1/sync/products"
 	SyncJobPath            = "/v1/sync/jobs/{productId}"
+	BrandShippingPath      = "/v1/brands/{id}/shipping-price-lists"
 )
 
 func ProductSearchEndpointVerified() bool {
