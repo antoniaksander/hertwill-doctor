@@ -303,7 +303,8 @@ func (c Client) UpdateVariationPrices(ctx context.Context, id string, variationI
 	return updated, nil
 }
 
-// ProductFields returns the raw text fields that ReplaceInField can edit.
+// ProductFields returns the raw text fields that ReplaceInField can edit, plus
+// the product's shipping class slug.
 func (c Client) ProductFields(ctx context.Context, id string) (map[string]string, error) {
 	var product wooProduct
 	if err := c.get(ctx, "/wp-json/wc/v3/products/"+url.PathEscape(id), nil, &product); err != nil {
@@ -314,11 +315,12 @@ func (c Client) ProductFields(ctx context.Context, id string) (map[string]string
 		"slug":              product.Slug,
 		"short_description": product.ShortDesc,
 		"description":       product.Description,
+		"shipping_class":    product.ShippingClass,
 	}, nil
 }
 
-// UpdateProductField sets one text field (name, slug, short_description or
-// description) via PUT /products/{id}, sending only that field.
+// UpdateProductField sets one text field (name, slug, short_description,
+// description or shipping_class) via PUT /products/{id}, sending only that field.
 func (c Client) UpdateProductField(ctx context.Context, id, field, value string) (map[string]string, error) {
 	body, err := json.Marshal(map[string]string{field: value})
 	if err != nil {
@@ -333,6 +335,7 @@ func (c Client) UpdateProductField(ctx context.Context, id, field, value string)
 		"slug":              product.Slug,
 		"short_description": product.ShortDesc,
 		"description":       product.Description,
+		"shipping_class":    product.ShippingClass,
 	}, nil
 }
 
@@ -656,6 +659,7 @@ type wooProduct struct {
 	Categories    []wooTerm `json:"categories"`
 	Brands        []wooTerm `json:"brands"`
 	Tags          []wooTerm `json:"tags"`
+	ShippingClass string    `json:"shipping_class"`
 }
 
 type wooTerm struct {
@@ -678,21 +682,22 @@ func (p wooProduct) toModel() model.Product {
 		stock = strconv.Itoa(*p.StockQuantity)
 	}
 	return model.Product{
-		Found:      true,
-		ID:         strconv.Itoa(p.ID),
-		Name:       p.Name,
-		SKU:        p.SKU,
-		Price:      p.Price,
-		Regular:    p.RegularPrice,
-		Sale:       p.SalePrice,
-		Type:       p.Type,
-		Stock:      stock,
-		ImageCount: &imageCount,
-		Status:     p.Status,
-		Brand:      strings.Join(termLabels(p.Brands), ", "),
-		Categories: termLabels(p.Categories),
-		Tags:       termLabels(p.Tags),
-		TagIDs:     termIDs(p.Tags),
+		Found:         true,
+		ID:            strconv.Itoa(p.ID),
+		Name:          p.Name,
+		SKU:           p.SKU,
+		Price:         p.Price,
+		Regular:       p.RegularPrice,
+		Sale:          p.SalePrice,
+		Type:          p.Type,
+		Stock:         stock,
+		ImageCount:    &imageCount,
+		Status:        p.Status,
+		Brand:         strings.Join(termLabels(p.Brands), ", "),
+		ShippingClass: p.ShippingClass,
+		Categories:    termLabels(p.Categories),
+		Tags:          termLabels(p.Tags),
+		TagIDs:        termIDs(p.Tags),
 	}
 }
 

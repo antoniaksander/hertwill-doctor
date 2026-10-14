@@ -134,6 +134,16 @@ hwd woo delete-category --id 650 --dry-run
 - `update-category` renames a category (`--name`) and/or moves it (`--parent`, `0` for top level), sending only those fields. The slug is never changed, so a rename keeps the URL; a move changes the URL path of the category and its subcategories. It refuses a name another category already has, a parent that doesn't exist, and a move under the category's own subcategory.
 - `delete-category` deletes a category permanently (`DELETE /products/categories/{id}?force=true`; terms have no trash). It refuses if the category has subcategories or any product in any status, checked with `GET /products?category={id}&status=any`, because WooCommerce's own category count leaves out private and draft products. It also refuses the default category (`uncategorized`). Product `trash` still never sends `force`.
 
+
+### Shipping class
+
+```sh
+hwd woo set-shipping-class --id 35761 --class brand-new-vintage-by-kriss --dry-run
+hwd woo set-shipping-class --id 35761 --class brand-new-vintage-by-kriss --confirm
+hwd woo set-shipping-class --id 35761 --class none --confirm
+```
+
+Sends only `shipping_class` (`PUT /wp-json/wc/v3/products/{id}`); variations without their own class inherit it. `none` removes the class. WooCommerce silently ignores an unknown slug, so with `--confirm` the command fails when the product didn't end up with the requested class. `hwd woo product` shows the current `Shipping class`.
 ## Hertwill
 
 ```sh
@@ -188,6 +198,17 @@ Refused locally (no request sent): product not in the unsynced import list, or p
 `--retry-failed` also accepts products with import status `sync-failed`, which drop out of the default list. If such a product is live in WooCommerce, the re-sync sets it to private first.
 
 `remove` deletes products from the import list (`DELETE /v1/import-list/products/{id}`, one request per ID, at most 50). It refuses any product whose SKU is in WooCommerce, because removing may unlink a live product; `--force` overrides.
+
+### Brand shipping rates
+
+```sh
+hwd hertwill brand-shipping --brands 230,42
+hwd hertwill brand-shipping --brands 230 --json
+```
+
+`brand-shipping` reads `GET /v1/brands/{id}/shipping-price-lists` for each Hertwill brand ID (read-only). One line per price list: brand ID, list name, `per-order` or `per-item`, and `COUNTRY=price` for every destination that has a price (EUR, excl. VAT). Countries without a price are not delivered to. `--json` prints the lists with every destination (`price` null = not delivered, 0 = free). The brand ID is in `hwd hertwill product --id <ID> --raw` (`data.brand.id`).
+
+Brands with several per-item lists (e.g. "1 box" / "2 boxes") assign one list per product. The API doesn't return it; the product's hertwill.com page embeds it as `shipping_price_id` in the product JSON.
 
 ### Broken WooCommerce link
 
