@@ -25,7 +25,7 @@ Keep the folder **outside** any website folder, so the keys can never be served 
 Copy `.env.example` to `.env` and fill it in yourself (an AI agent should never see these values):
 
 ```sh
-HWD_STORE_NAME=Roxder
+HWD_STORE_NAME=My Store
 WOO_BASE_URL=https://example.com
 WOO_CONSUMER_KEY=ck_...
 WOO_CONSUMER_SECRET=cs_...
@@ -46,7 +46,7 @@ Then check it:
 Keep one config file per store, for example in a `stores/` folder next to the repo (not committed):
 
 ```text
-stores/roxder.env
+stores/my-store.env
 stores/client-b.env
 ```
 
