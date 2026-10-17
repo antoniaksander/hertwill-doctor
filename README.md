@@ -39,6 +39,9 @@ If the store charges each brand's delivery through shipping classes, look up the
 ```sh
 ./hwd hertwill brand-shipping --brands <hertwill brand id>
 ./hwd woo set-shipping-class --id <woo id> --class <slug> --dry-run
+./hwd woo set-price --id <variation id> --price <price> --dry-run   # per-size prices
+./hwd woo set-seo --id <woo id> --title "<SEO title>" --dry-run
+./hwd woo set-class-costs --class <slug> --costs "EE=…,FI=…" --others -1 --dry-run
 ```
 
 Reprice a product that is already live (simple or variable):

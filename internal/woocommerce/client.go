@@ -649,6 +649,7 @@ type wooProduct struct {
 	RegularPrice  string    `json:"regular_price"`
 	SalePrice     string    `json:"sale_price"`
 	Type          string    `json:"type"`
+	ParentID      int       `json:"parent_id"`
 	Slug          string    `json:"slug"`
 	ShortDesc     string    `json:"short_description"`
 	Description   string    `json:"description"`
@@ -677,6 +678,10 @@ func termLabels(terms []wooTerm) []string {
 
 func (p wooProduct) toModel() model.Product {
 	imageCount := len(p.Images)
+	parentID := ""
+	if p.ParentID > 0 {
+		parentID = strconv.Itoa(p.ParentID)
+	}
 	stock := p.StockStatus
 	if p.StockQuantity != nil {
 		stock = strconv.Itoa(*p.StockQuantity)
@@ -690,6 +695,7 @@ func (p wooProduct) toModel() model.Product {
 		Regular:       p.RegularPrice,
 		Sale:          p.SalePrice,
 		Type:          p.Type,
+		ParentID:      parentID,
 		Stock:         stock,
 		ImageCount:    &imageCount,
 		Status:        p.Status,

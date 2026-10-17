@@ -336,6 +336,8 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 		switch {
 		case err != nil:
 			entry.Refused = err.Error()
+		case product.Type == "variation" && product.ParentID == "":
+			entry.Refused = "variation without a parent product ID"
 		case product.Type == "variable":
 			variations, err = client.ProductVariations(context.Background(), wooID)
 			if err != nil {
@@ -371,6 +373,17 @@ func runWooSetPrice(args []string, stdout io.Writer, g globals, client woocommer
 					entry.Error = fmt.Sprintf("%s (%d of %d variations updated)", err, len(updated), len(ids))
 					report.Failed++
 				} else {
+					report.Changed++
+				}
+			} else if product.Type == "variation" {
+				// A variation can't be updated through /products/{id}; it goes
+				// through its parent's variations batch endpoint.
+				updated, err := client.UpdateVariationPrices(context.Background(), product.ParentID, []int{t.ID}, newPrice)
+				if err != nil {
+					entry.Error = err.Error()
+					report.Failed++
+				} else {
+					entry.After = distinctPrices(updated, func(v woocommerce.Variation) string { return v.RegularPrice })
 					report.Changed++
 				}
 			} else {
