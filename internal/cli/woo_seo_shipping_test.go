@@ -87,7 +87,7 @@ func newMetaServer(t *testing.T, puts *[]string) {
 func TestWooSetSEODryRunSendsNothing(t *testing.T) {
 	var puts []string
 	newMetaServer(t, &puts)
-	code, out, errOut := runCLI(t, "woo", "set-seo", "--id", "36400", "--title", "New title | Roxder", "--dry-run")
+	code, out, errOut := runCLI(t, "woo", "set-seo", "--id", "36400", "--title", "New title | My Store", "--dry-run")
 	if code != 0 {
 		t.Fatalf("exit %d: %s %s", code, out, errOut)
 	}
@@ -102,14 +102,14 @@ func TestWooSetSEODryRunSendsNothing(t *testing.T) {
 func TestWooSetSEOConfirmSendsOnlyMeta(t *testing.T) {
 	var puts []string
 	newMetaServer(t, &puts)
-	code, out, errOut := runCLI(t, "woo", "set-seo", "--id", "36400", "--title", "New title | Roxder", "--description", "Short description.", "--confirm")
+	code, out, errOut := runCLI(t, "woo", "set-seo", "--id", "36400", "--title", "New title | My Store", "--description", "Short description.", "--confirm")
 	if code != 0 {
 		t.Fatalf("exit %d: %s %s", code, out, errOut)
 	}
 	if len(puts) != 1 || !strings.HasPrefix(puts[0], `{"meta_data":[`) || strings.Contains(puts[0], `"name"`) {
 		t.Fatalf("expected one meta_data-only PUT, got %v", puts)
 	}
-	if !strings.Contains(out, "after:  New title | Roxder") || !strings.Contains(out, "after:  Short description.") {
+	if !strings.Contains(out, "after:  New title | My Store") || !strings.Contains(out, "after:  Short description.") {
 		t.Fatalf("unexpected output:\n%s", out)
 	}
 }
