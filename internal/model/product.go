@@ -9,6 +9,8 @@ type Product struct {
 	Regular    string   `json:"regular_price,omitempty"`
 	Sale       string   `json:"sale_price,omitempty"`
 	Type       string   `json:"type,omitempty"`
+	// ParentID is the variable product's ID when Type is "variation".
+	ParentID   string   `json:"parent_id,omitempty"`
 	Stock      string   `json:"stock,omitempty"`
 	ImageCount *int     `json:"image_count,omitempty"`
 	ImageURLs  []string `json:"image_urls,omitempty"`

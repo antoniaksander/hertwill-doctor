@@ -420,6 +420,30 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetShippingClass(args[1:], stdout, g, client, stats)
+	case "set-seo":
+		if hasHelpArg(args[1:]) {
+			wooSetSEOHelp(stdout)
+			return nil
+		}
+		return runWooSetSEO(args[1:], stdout, g, client, stats)
+	case "shipping-classes":
+		if hasHelpArg(args[1:]) {
+			wooShippingClassesHelp(stdout)
+			return nil
+		}
+		return runWooShippingClasses(stdout, g, client)
+	case "create-shipping-class":
+		if hasHelpArg(args[1:]) {
+			wooCreateShippingClassHelp(stdout)
+			return nil
+		}
+		return runWooCreateShippingClass(args[1:], stdout, g, client)
+	case "set-class-costs":
+		if hasHelpArg(args[1:]) {
+			wooSetClassCostsHelp(stdout)
+			return nil
+		}
+		return runWooSetClassCosts(args[1:], stdout, g, client, stats)
 	default:
 		return fmt.Errorf("unknown woo subcommand %q", args[0])
 	}
@@ -1722,6 +1746,14 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooSetStatusHelp(w)
 	case "set-shipping-class":
 		wooSetShippingClassHelp(w)
+	case "set-seo":
+		wooSetSEOHelp(w)
+	case "shipping-classes":
+		wooShippingClassesHelp(w)
+	case "create-shipping-class":
+		wooCreateShippingClassHelp(w)
+	case "set-class-costs":
+		wooSetClassCostsHelp(w)
 	case "set-price":
 		wooSetPriceHelp(w)
 	case "set-name":
@@ -1830,6 +1862,10 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories, brands and/or tags (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")
 	fmt.Fprintln(w, "  set-shipping-class  Set a product's shipping class (write operation)")
+	fmt.Fprintln(w, "  set-seo        Set a product's SEO title/description (Rank Math meta, write operation)")
+	fmt.Fprintln(w, "  shipping-classes  List shipping classes with IDs")
+	fmt.Fprintln(w, "  create-shipping-class  Create a shipping class (write operation)")
+	fmt.Fprintln(w, "  set-class-costs  Set a shipping class's cost per zone/country (write operation)")
 	fmt.Fprintln(w, "  set-price      Change products' regular price, incl. all variations (write operation)")
 	fmt.Fprintln(w, "  set-name       Change a product's name; the URL slug stays (write operation)")
 	fmt.Fprintln(w, "  trash          Move a product to the trash, never permanent (write operation)")

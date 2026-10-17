@@ -115,6 +115,8 @@ hwd woo set-terms --id 33387 --add-tags 761 --dry-run
 hwd woo set-status --id 31968 --status publish --dry-run
 hwd woo set-price --id 9415 --price 32.50 --dry-run
 hwd woo set-price --file prices.txt --confirm
+hwd woo set-price --id 36533 --price 39.95 --dry-run   # a single variation
+hwd woo set-seo --id 36400 --title "Brand Product | Store" --description "…" --dry-run
 hwd woo set-name --id 1636 --name "New name" --dry-run
 hwd woo replace --id 1636 --field short_description --find Old --replace New --dry-run
 hwd woo trash --id 9427 --dry-run
@@ -126,7 +128,8 @@ hwd woo delete-category --id 650 --dry-run
 
 - `set-terms` replaces a product's categories, brands and/or tags. A flag that is left out is not changed; `none` clears a list. `--add-tags` keeps the current tags and adds the given ones (use it for season tags); it can't be combined with `--tags`.
 - `set-status` changes only the status: `publish`, `private`, `draft` or `pending`.
-- `set-price` changes only the regular price incl. VAT. For a variable product it sets the same price on every variation (`POST /products/{id}/variations/batch`, 100 per request). The file has one `<woo id> <price>` per line. Sale prices are reported, not changed. Use it to reprice live products; `hwd hertwill sync` refuses products that are already synced. A later Hertwill re-sync may set its own price again.
+- `set-price` changes only the regular price incl. VAT. For a variable product it sets the same price on every variation (`POST /products/{id}/variations/batch`, 100 per request). The file has one `<woo id> <price>` per line. Sale prices are reported, not changed. Use it to reprice live products; `hwd hertwill sync` refuses products that are already synced. A later Hertwill re-sync may set its own price again. A **variation ID** sets just that variation, through its parent's batch endpoint (`PUT /products/{variation id}` returns 404); use it to give sizes their own prices after a sync.
+- `set-seo` writes the Rank Math SEO title and/or meta description (`rank_math_title`, `rank_math_description`) through the product's `meta_data`, nothing else. With `--confirm` it fails if WooCommerce didn't store the value.
 - `set-name` changes the title; the URL slug stays.
 - `replace` does a case-sensitive find and replace in one of `name`, `slug`, `short_description` or `description`, and refuses if the text isn't found.
 - `trash` moves a product to the bin; it is never deleted permanently. Remove it from the Hertwill import list too, or a later sync may create it again.
@@ -136,6 +139,17 @@ hwd woo delete-category --id 650 --dry-run
 
 
 ### Shipping class
+
+```sh
+hwd woo shipping-classes
+hwd woo create-shipping-class --name "Matteo" --slug brand-matteo --dry-run
+hwd woo set-class-costs --class brand-matteo --costs "EE=5.23,FI=13.49,LV=4.79" --others -1 --dry-run
+```
+
+- `shipping-classes` lists classes with IDs and product counts.
+- `create-shipping-class` refuses a slug that already exists.
+- `set-class-costs` sets the class's cost (`class_cost_<id>`) in each zone's flat rate method. Zones are matched by their country locations against `--costs` (`CC=COST`, the value WooCommerce stores: a number or a formula like `4.99 * [qty]`); zones whose countries aren't listed get `--others` (e.g. the store's "not deliverable" cost) or are skipped, and zones without country locations are always skipped. Only that setting is sent (`PUT /shipping/zones/{zone}/methods/{instance}`). Customers with an open cart may see cached rates until the shipping cache refreshes; re-saving one zone in wp-admin forces it.
+
 
 ```sh
 hwd woo set-shipping-class --id 35761 --class brand-new-vintage-by-kriss --dry-run
