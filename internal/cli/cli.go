@@ -426,6 +426,12 @@ func runWoo(args []string, stdout, _ io.Writer, g globals, cfg config.Config, st
 			return nil
 		}
 		return runWooSetSEO(args[1:], stdout, g, client, stats)
+	case "orders":
+		if hasHelpArg(args[1:]) {
+			wooOrdersHelp(stdout)
+			return nil
+		}
+		return runWooOrders(args[1:], stdout, g, client)
 	case "shipping-classes":
 		if hasHelpArg(args[1:]) {
 			wooShippingClassesHelp(stdout)
@@ -1748,6 +1754,8 @@ func wooHelpFor(args []string, w io.Writer) {
 		wooSetShippingClassHelp(w)
 	case "set-seo":
 		wooSetSEOHelp(w)
+	case "orders":
+		wooOrdersHelp(w)
 	case "shipping-classes":
 		wooShippingClassesHelp(w)
 	case "create-shipping-class":
@@ -1858,6 +1866,7 @@ func wooHelp(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  product        Look up a WooCommerce product by SKU or ID")
 	fmt.Fprintln(w, "  search         Search WooCommerce products")
+	fmt.Fprintln(w, "  orders         List orders for sales reports (read-only)")
 	fmt.Fprintln(w, "  repair-images  Repair WooCommerce product images from Hertwill (write operation)")
 	fmt.Fprintln(w, "  set-terms      Replace a product's categories, brands and/or tags (write operation)")
 	fmt.Fprintln(w, "  set-status     Change a product's status, e.g. publish (write operation)")

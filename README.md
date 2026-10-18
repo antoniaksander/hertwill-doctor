@@ -31,6 +31,7 @@ Sync a product at your price, check it, then publish:
 ./hwd hertwill sync --id 9107 --price 40.95 --dry-run
 ./hwd hertwill sync --id 9107 --price 40.95 --confirm
 ./hwd woo product --sku <sku>
+./hwd woo orders --after <YYYY-MM-DD>   # read-only sales list
 ./hwd woo set-status --id <woo id> --status publish --confirm
 ```
 

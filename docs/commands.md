@@ -158,6 +158,15 @@ hwd woo set-shipping-class --id 35761 --class none --confirm
 ```
 
 Sends only `shipping_class` (`PUT /wp-json/wc/v3/products/{id}`); variations without their own class inherit it. `none` removes the class. WooCommerce silently ignores an unknown slug, so with `--confirm` the command fails when the product didn't end up with the requested class. `hwd woo product` shows the current `Shipping class`.
+## WooCommerce orders
+
+```sh
+hwd woo orders --after 2026-10-01
+hwd woo orders --after 2026-10-01 --status completed --json
+```
+
+Read-only order list for sales reports (`GET /orders`, newest first, all pages). The default statuses are `completed,processing,on-hold`. The table shows date, order, status, country, total, coupon and items. `--json` also gives each line's product and variation ID, SKU, quantity and line total excl. tax, plus `total_tax`, `shipping_total` and `discount_total`. No order is ever changed.
+
 ## Hertwill
 
 ```sh
